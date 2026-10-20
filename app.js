@@ -116,11 +116,11 @@ const SECTION_DEFS = {
       { key: 'website',  label: '个人主页 / 作品链接', ph: '如：github.com/你的名字', half: true }
     ]
   },
-  /* 「更多信息（选填）」折叠区字段：全部选填，填了才显示 */
+  /* 「更多信息（选填）」折叠区字段：全部下拉选择（禁止手填），选了才显示 */
   basicExtra: [
-    { key: 'nation',    label: '民族',     ph: '如：汉族' },
-    { key: 'political', label: '政治面貌', ph: '如：共青团员 / 中共党员' },
-    { key: 'hukou',     label: '户籍',     ph: '如：广东深圳' }
+    { key: 'nation', label: '民族', options: ['汉族', '蒙古族', '回族', '藏族', '维吾尔族', '苗族', '彝族', '壮族', '布依族', '朝鲜族', '满族', '侗族', '瑶族', '白族', '土家族', '哈尼族', '哈萨克族', '傣族', '黎族', '僳僳族', '佤族', '畲族', '高山族', '拉祜族', '水族', '东乡族', '纳西族', '景颇族', '柯尔克孜族', '土族', '达斡尔族', '仫佬族', '羌族', '布朗族', '撒拉族', '毛南族', '仡佬族', '锡伯族', '阿昌族', '普米族', '塔吉克族', '怒族', '乌孜别克族', '俄罗斯族', '鄂温克族', '德昂族', '保安族', '裕固族', '京族', '塔塔尔族', '独龙族', '鄂伦春族', '赫哲族', '门巴族', '珞巴族', '基诺族'] },
+    { key: 'political', label: '政治面貌', options: ['中共党员', '中共预备党员', '共青团员', '民革党员', '民盟盟员', '民建会员', '民进会员', '农工党党员', '致公党党员', '九三学社社员', '台盟盟员', '无党派人士', '群众'] },
+    { key: 'hukou', label: '户籍', options: ['北京市', '天津市', '河北省', '山西省', '内蒙古自治区', '辽宁省', '吉林省', '黑龙江省', '上海市', '江苏省', '浙江省', '安徽省', '福建省', '江西省', '山东省', '河南省', '湖北省', '湖南省', '广东省', '广西壮族自治区', '海南省', '重庆市', '四川省', '贵州省', '云南省', '西藏自治区', '陕西省', '甘肃省', '青海省', '宁夏回族自治区', '新疆维吾尔自治区', '香港特别行政区', '澳门特别行政区', '台湾省'] }
   ],
   education: {
     title: '教育经历', type: 'list',
@@ -201,7 +201,7 @@ const customItem = id => data.sections.custom.items.find(it => ('custom:' + it.i
 function moduleName(id) {
   if (isCustomId(id)) {
     const it = customItem(id);
-    return '自定义：' + ((it && it.title.trim()) || '未命名');
+    return (it && it.title.trim()) || '未命名模块'; // 直接显示模块名，不带「自定义」前缀
   }
   return SECTION_DEFS[id] ? SECTION_DEFS[id].title : id;
 }
@@ -329,6 +329,7 @@ function applySkin(id, { silent = false } = {}) {
 function renderSkinMenus() {
   for (const boxId of ['skin-menu-home', 'skin-menu-editor']) {
     const box = $(boxId);
+    if (!box) continue; // 编辑页已无主题切换入口（只在主页切换）
     const cur = SKINS[data.skin];
     box.innerHTML =
       `<button class="btn skin-btn" data-action="skin-menu">
@@ -495,23 +496,38 @@ function renderForm() {
     if (localStorage.getItem('avatar_tip_closed') !== '1') {
       html += `<div class="avatar-tip"><span>建议：正面、清晰、浅色背景的正式照片；避免自拍、生活照、动漫头像。</span><button class="btn btn-mini" data-action="avatar-tip-close" title="不再提示">×</button></div>`;
     }
-    // 页头对齐（左/中/右）
+    // 字段顺序：页头对齐 → 姓名 → 求职意向 → 性别/年龄 → 更多选填 → 电话 → 联系方式显示 → 邮箱/所在地/主页
+    const F = (key, label, ph) => `<div class="field"><label>${label}</label>
+      <input data-s="basic" data-f="${key}" value="${esc(sec[key])}" placeholder="${esc(ph)}"></div>`;
     const aligns = { left: '靠左', center: '居中', right: '靠右' };
     html += `<div class="field"><label>页头对齐</label>
       <select data-layout="align">${Object.entries(aligns).map(([v, t]) =>
         `<option value="${v}" ${data.layout.align === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
-    // 联系方式显示：标签模式（电话：xxx）/ 紧凑模式（无前缀）
+    html += F('name', '姓名', '如：张三');
+    html += F('position', '求职意向（意向岗位）', '如：前端开发实习生');
+    html += `<div class="field-row">
+      <div class="field"><label>性别</label>
+        <select data-s="basic" data-f="gender">${['', '男', '女'].map(o =>
+          `<option value="${o}" ${sec.gender === o ? 'selected' : ''}>${o || '请选择'}</option>`).join('')}</select></div>
+      ${F('age', '年龄', '如：22')}
+    </div>`;
+    // 更多信息（选填）折叠区：民族 / 政治面貌 / 户籍，全部下拉选择
+    html += `<details class="more-fields"><summary>更多信息（选填）：民族 / 政治面貌 / 户籍</summary>` +
+      SECTION_DEFS.basicExtra.map(f => `<div class="field"><label>${esc(f.label)}</label>
+        <select data-s="basic" data-f="${f.key}">
+          <option value="">请选择</option>
+          ${f.options.map(o => `<option value="${esc(o)}" ${sec[f.key] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+        </select></div>`).join('') +
+      `</details>`;
+    html += F('phone', '电话', '如：138xxxx8888');
+    // 联系方式显示紧跟电话，上下相邻、布局连贯
     html += `<div class="field"><label>联系方式显示</label>
       <select data-layout="contactMode">
         <option value="label" ${data.layout.contactMode !== 'compact' ? 'selected' : ''}>标签模式（电话：138…）</option>
         <option value="compact" ${data.layout.contactMode === 'compact' ? 'selected' : ''}>紧凑模式（无标签前缀）</option>
       </select></div>`;
-    html += fieldsHtml(def.fields, sec, 'basic', -1);
-    // 更多信息（选填）折叠区：民族 / 政治面貌 / 户籍，填了才在简历里显示
-    html += `<details class="more-fields"><summary>更多信息（选填）：民族 / 政治面貌 / 户籍</summary>` +
-      SECTION_DEFS.basicExtra.map(f => `<div class="field"><label>${esc(f.label)}</label>
-        <input data-s="basic" data-f="${f.key}" value="${esc(sec[f.key])}" placeholder="${esc(f.ph)}"></div>`).join('') +
-      `</details>`;
+    html += `<div class="field-row">${F('email', '邮箱', '如：hi@example.com')}${F('city', '所在地', '如：广州')}</div>`;
+    html += F('website', '个人主页 / 作品链接', '如：github.com/你的名字');
   } else if (def.type === 'coreSkills') {
     // 核心技能：分组 + 简洁标签编辑（回车添加关键词）
     html += sec.groups.map((g, gi) => `
@@ -599,7 +615,9 @@ function onFormInput(e) {
   renderPreview();
 }
 
-/* ---------- 编辑器：中栏模块管理面板 ---------- */
+/* ---------- 编辑器：中栏模块管理面板 ----------
+   核心模块（基本信息/教育/项目/实习工作/核心技能/自我评价）：只显隐 + 排序，无删除键
+   自定义模块：可显隐 + 排序 + ✕ 直接删除（不设「已移除模块」） */
 function renderModulePanel() {
   const order = data.sectionOrder;
   $('block-list').innerHTML = order.map((id, idx) => {
@@ -610,24 +628,9 @@ function renderModulePanel() {
         title="${vis ? '点击隐藏' : '点击显示'}">${vis ? ICONS.eye : ICONS.eyeOff}</button>
       <button class="btn btn-mini" data-action="sec-up" data-i="${idx}" ${idx === 0 ? 'disabled' : ''}>↑</button>
       <button class="btn btn-mini" data-action="sec-down" data-i="${idx}" ${idx === order.length - 1 ? 'disabled' : ''}>↓</button>
-      ${id === 'basic' ? '' : `<button class="btn btn-mini" data-action="mod-remove" data-id="${esc(id)}" title="从简历移除（数据保留，可重新添加）">✕</button>`}
+      ${isCustomId(id) ? `<button class="btn btn-mini" data-action="custom-del" data-id="${esc(id)}" title="删除该模块">✕</button>` : ''}
     </li>`;
   }).join('');
-  // 已移除模块：数据仍在草稿里，可一键加回
-  const removed = removedModules();
-  $('removed-wrap').innerHTML = removed.length
-    ? `<h3 class="col-title" style="margin-top:16px">已移除模块</h3><ul class="block-list">` +
-      removed.map(id => `<li class="block-item off"><span class="bname">${esc(moduleName(id))}</span>
-        <button class="btn btn-mini" data-action="mod-readd" data-id="${esc(id)}">重新添加</button></li>`).join('') +
-      `</ul>`
-    : '';
-}
-function removedModules() {
-  const std = ['education', 'projects', 'work', 'coreSkills', 'summary'].filter(id => !data.sectionOrder.includes(id));
-  const customs = data.sections.custom.items
-    .map(it => 'custom:' + it.id)
-    .filter(vid => !data.sectionOrder.includes(vid));
-  return [...std, ...customs];
 }
 
 /* ---------- 标题主题色调色盘（简历标题配色，与网站皮肤独立） ---------- */
@@ -910,72 +913,124 @@ function refreshAll() {
   renderSectionNav(); renderForm(); renderModulePanel(); renderPalette(); renderPreview(); applyColOrder(); renderTemplateCards();
 }
 
-/* ---------- 导出：Word（HTML→.doc，Word 可打开继续编辑） ---------- */
-function exportWord() {
+/* ---------- 导出：真正的 Word（.docx，本地 docx.js 生成，Word/WPS 可编辑） ---------- */
+const WORD_FONTS = { system: 'Microsoft YaHei', yahei: 'Microsoft YaHei', hei: 'SimHei', song: 'SimSun', kai: 'KaiTi' };
+async function exportWord() {
   if (isResumeEmpty()) { toast('简历内容还是空的，先填写一些内容再导出吧', 'warn'); return; }
-  const blob = new Blob(['\uFEFF' + buildWordHtml()], { type: 'application/msword' }); // BOM 防中文乱码
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = fileBase() + '.doc';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast('已导出 Word（可用 Word 打开继续编辑）');
+  if (typeof docx === 'undefined') { toast('Word 组件未加载（assets/docx.umd.js 缺失）', 'warn'); return; }
+  showLoading('正在生成 Word…');
+  try {
+    const blob = await buildDocx();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileBase() + '.docx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('已导出 Word（.docx，文字可改、头像在右侧）');
+  } catch (e) {
+    console.error(e);
+    toast('导出 Word 失败，请重试', 'warn');
+  } finally {
+    hideLoading();
+  }
 }
-/* 生成 Word 兼容 HTML：内联样式单栏排版（双栏模板在 Word 里统一排为单栏），
-   包含头像、信息标签、所选字体与主题色 */
-function buildWordHtml() {
+function dataUrlToBytes(u) { // base64 头像 → 字节数组（ImageRun 需要）
+  const bin = atob(u.split(',')[1]);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+async function buildDocx() {
+  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
+          WidthType, AlignmentType, BorderStyle, TabStopType, VerticalAlign } = docx;
   const b = data.sections.basic;
-  const font = (FONTS[data.font] || FONTS.system).stack.replace(/"/g, '');
-  const theme = data.themeColor;
+  const theme = data.themeColor.replace('#', '');
+  const font = WORD_FONTS[data.font] || 'Microsoft YaHei';
   const labelMode = data.layout.contactMode !== 'compact';
-  const L = t => (labelMode ? `<span style="color:#8A93A3">${t}</span>` : '');
-  const nl = s => esc(s).replace(/\n/g, '<br>');
-  const contacts = [['电话：', b.phone], ['邮箱：', b.email], ['所在地：', b.city], ['个人主页：', b.website]]
-    .filter(([, v]) => String(v).trim())
-    .map(([t, v]) => `<span style="margin-right:14pt">${L(t)}${esc(v)}</span>`).join('');
-  let html = `<table width="100%" cellpadding="0" cellspacing="0"><tr><td>
-    <div style="font-size:22pt;font-weight:bold">${esc(b.name) || '姓名'}</div>
-    <div style="font-size:12pt;color:${theme};margin-top:2pt">${L('求职意向：')}${esc(b.position)}</div>
-    <div style="font-size:9.5pt;color:#5A6270;margin-top:6pt">${contacts}</div>
-  </td>${b.avatar ? `<td align="right" valign="top"><img src="${b.avatar}" width="70" style="border-radius:6pt"></td>` : ''}</tr></table>`;
-  const secH = t => `<div style="font-size:13pt;font-weight:bold;color:${theme};border-bottom:1pt solid ${theme};padding-bottom:3pt;margin:14pt 0 6pt">${esc(t)}</div>`;
-  const itemHead = (t, d2) => `<div style="margin-top:6pt"><b>${esc(t)}</b><span style="color:#7A828F;font-size:9.5pt">　${esc(d2)}</span></div>`;
-  const sub = s => `<div style="color:#5A6270;font-size:10pt">${esc(s)}</div>`;
-  const desc = s => `<div style="margin-top:2pt">${nl(s)}</div>`;
+  const NO = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  const T = (text, opts = {}) => new TextRun({ text, font, ...opts });
+  const P = (children, opts = {}) => new Paragraph({ children, ...opts });
+  const joinLine = pairs => pairs.filter(([, v]) => String(v).trim())
+    .map(([t, v]) => (labelMode ? t : '') + v).join('    ');
+  const rawDate = it => [it.start, it.end].filter(v => String(v).trim()).join(' ~ ');
+  const kids = [];
+
+  /* 页头：左信息 + 右头像（无边框表格，头像位置稳定、缩放不垮） */
+  const headLeft = [
+    P([T(b.name || '姓名', { bold: true, size: 44 })], { spacing: { after: 60 } }),
+    P([T((labelMode ? '求职意向：' : '') + (b.position || ''), { color: theme, size: 24 })], { spacing: { after: 100 } })
+  ];
+  const contactLine = joinLine([['电话：', b.phone], ['邮箱：', b.email], ['所在地：', b.city], ['个人主页：', b.website]]);
+  if (contactLine) headLeft.push(P([T(contactLine, { color: '5A6270', size: 19 })]));
+  const metaLine = joinLine([['性别：', b.gender], ['年龄：', b.age], ['民族：', b.nation], ['政治面貌：', b.political], ['户籍：', b.hukou]]);
+  if (metaLine) headLeft.push(P([T(metaLine, { color: '5A6270', size: 19 })], { spacing: { before: 40 } }));
+  const headCells = [new TableCell({
+    children: headLeft, width: { size: 78, type: WidthType.PERCENTAGE },
+    borders: NO, verticalAlign: VerticalAlign.TOP
+  })];
+  if (b.avatar) {
+    headCells.push(new TableCell({
+      children: [new Paragraph({
+        children: [new ImageRun({ data: dataUrlToBytes(b.avatar), transformation: { width: 70, height: 70 } })],
+        alignment: AlignmentType.RIGHT
+      })],
+      width: { size: 22, type: WidthType.PERCENTAGE }, borders: NO, verticalAlign: VerticalAlign.TOP
+    }));
+  }
+  kids.push(new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: { top: NO, bottom: NO, left: NO, right: NO, insideHorizontal: NO, insideVertical: NO },
+    rows: [new TableRow({ children: headCells })]
+  }));
+
+  /* 区块内容（含信息标签、所选字体、主题色标题） */
+  const secH = t => P([T(t, { bold: true, size: 24, color: theme })], {
+    border: { bottom: { color: theme, space: 2, value: 'single', size: 8 } },
+    spacing: { before: 260, after: 120 }
+  });
+  const itemHead = (t, d2) => P([T(t, { bold: true, size: 21 }), T('\t' + d2, { color: '7A828F', size: 18 })],
+    { tabStops: [{ type: TabStopType.RIGHT, position: 9000 }], spacing: { before: 120 } });
+  const subP = s => s ? P([T(s, { color: '5A6270', size: 19 })]) : null;
+  const descPs = s => String(s || '').split('\n').filter(x => x.trim())
+    .map(x => P([T(x, { size: 20 })], { spacing: { after: 40 } }));
+  const push = (...els) => els.forEach(e => e && kids.push(e));
   for (const id of data.sectionOrder) {
     if (id === 'basic' || !secVisible(id) || sectionEmpty(id)) continue;
     if (isCustomId(id)) {
       const it = customItem(id);
-      html += secH(it.title.trim() || '自定义区块') + desc(it.text);
+      push(secH(it.title.trim() || '未命名模块'), ...descPs(it.text));
       continue;
     }
     const sec = data.sections[id];
-    if (id === 'summary') { html += secH('自我评价') + desc(sec.text); continue; }
-    if (id === 'coreSkills') { // 核心技能：分组名 + 顿号连接的标签
-      html += secH('核心技能');
+    if (id === 'summary') { push(secH('自我评价'), ...descPs(sec.text)); continue; }
+    if (id === 'coreSkills') {
+      push(secH('核心技能'));
       for (const g of sec.groups) {
         if (!g.name.trim() && !g.tags.length) continue;
-        html += `<div style="margin-top:4pt">${g.name.trim() ? `<b>${esc(g.name)}：</b>` : ''}${g.tags.map(esc).join('、')}</div>`;
+        push(P([T(g.name.trim() ? g.name + '：' : '', { bold: true, size: 20 }), T(g.tags.join('、'), { size: 20 })],
+          { spacing: { after: 60 } }));
       }
       continue;
     }
-    html += secH(SECTION_DEFS[id].title);
+    push(secH(SECTION_DEFS[id].title));
     for (const it of sec.items) {
       if (id === 'education') {
         if (!filled([it], ['school', 'major', 'degree', 'gpa', 'courses', 'honors', 'start', 'end']).length) continue;
-        html += itemHead(it.school, dateRange(it)) + sub([it.degree, it.major, it.gpa && `GPA ${it.gpa}`].filter(Boolean).join(' · '));
-        if (it.courses.trim()) html += desc('主修课程：' + it.courses);
-        if (it.honors && it.honors.trim()) html += desc('荣誉 / 证书：' + it.honors);
+        push(itemHead(it.school || '学校', rawDate(it)),
+          subP([it.degree, it.major, it.gpa && `GPA ${it.gpa}`].filter(Boolean).join(' · ')),
+          ...(it.courses.trim() ? descPs('主修课程：' + it.courses) : []),
+          ...(it.honors && it.honors.trim() ? descPs('荣誉 / 证书：' + it.honors) : []));
       } else if (id === 'projects') {
         if (!filled([it], ['name', 'role', 'tech', 'desc', 'start', 'end']).length) continue;
-        html += itemHead(it.name, dateRange(it)) + sub([it.role, it.tech].filter(Boolean).join(' · ')) + (it.desc.trim() ? desc(it.desc) : '');
+        push(itemHead(it.name || '项目', rawDate(it)),
+          subP([it.role, it.tech].filter(Boolean).join(' · ')), ...descPs(it.desc));
       } else if (id === 'work') {
         if (!filled([it], ['company', 'role', 'desc', 'start', 'end']).length) continue;
-        html += itemHead(it.company, dateRange(it)) + sub(it.role) + (it.desc.trim() ? desc(it.desc) : '');
+        push(itemHead(it.company || '公司', rawDate(it)), subP(it.role), ...descPs(it.desc));
       }
     }
   }
-  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:${font};font-size:10.5pt;color:#2B2B2B;line-height:1.5}</style></head><body>${html}</body></html>`;
+  return Packer.toBlob(new Document({ sections: [{ children: kids }] }));
 }
 
 /* ---------- AI 功能（前端直连 Kimi API，key 仅存 localStorage） ---------- */
@@ -985,8 +1040,8 @@ const AI_MODEL = 'moonshot-v1-8k';
 let pendingPolish = null;  // 正在美化的字段定位 {s,i,f,c,cid}
 let currentReport = null;  // 当前诊断报告
 
-/* 统一调用入口：未填 key / 网络异常 / key 无效都给出友好提示并返回 null，不阻断其他功能 */
-async function callKimi(messages) {
+/* 统一调用入口：未填 key / 网络异常 / key 无效都给出友好提示并返回 null；支持 AbortSignal 取消 */
+async function callKimi(messages, { signal } = {}) {
   const key = (localStorage.getItem(AI_KEY) || '').trim();
   if (!key) {
     toast('请先在 AI 设置里填写 Kimi API key', 'warn');
@@ -997,7 +1052,8 @@ async function callKimi(messages) {
     const resp = await fetch(AI_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-      body: JSON.stringify({ model: AI_MODEL, messages, temperature: 0.3 })
+      body: JSON.stringify({ model: AI_MODEL, messages, temperature: 0.3 }),
+      signal
     });
     if (!resp.ok) {
       toast(resp.status === 401 ? 'API key 无效，请在 AI 设置里检查' : `AI 请求失败（${resp.status}），请稍后重试`, 'warn');
@@ -1006,6 +1062,7 @@ async function callKimi(messages) {
     const j = await resp.json();
     return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || '').trim() || null;
   } catch (e) {
+    if (e.name === 'AbortError') return { aborted: true }; // 用户主动取消，不报错
     toast('网络异常，无法连接 AI 服务（请检查网络）', 'warn');
     return null;
   }
@@ -1026,7 +1083,7 @@ async function aiPolish(ctx) {
     { role: 'user', content: `请美化这段${typeName}：\n${ctx.text}` }
   ]);
   hideLoading();
-  if (content === null) return;
+  if (!content || content.aborted) return;
   $('ai-result-text').value = content;
   $('ai-result-modal').classList.remove('hidden');
 }
@@ -1068,16 +1125,31 @@ function serializeResume() {
   return L.join('\n');
 }
 
-/* AI 诊断：HR 视角评分 + 分维度 + 逐条问题建议 */
-async function aiDiagnose() {
+/* AI 诊断：先设置 key（诊断入口内嵌设置，避免误触后空等），再开始；过程中可取消 */
+let diagCtrl = null;
+function openAiDiagnoseSetup() {
+  $('ai-report-body').innerHTML = `
+    <p class="ai-note">AI 将从 HR 视角为整份简历评分、给出分维度评分和逐条修改建议。<b>诊断需要先设置 Kimi API key</b>（仅保存在本地浏览器）。</p>
+    <div class="field"><label>Kimi API key</label>
+      <input type="password" id="ai-diag-key" placeholder="sk-xxxxxxxx" value="${esc(localStorage.getItem(AI_KEY) || '')}" autocomplete="off"></div>
+    <p class="ai-note">没有 key？到 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">platform.moonshot.cn</a> 免费申请，粘贴到上面即可开始。</p>
+    <button class="btn btn-primary" data-action="ai-diag-start">保存 key 并开始诊断</button>`;
+  $('ai-report-modal').classList.remove('hidden');
+}
+async function runDiagnosis() {
   if (isResumeEmpty()) { toast('简历内容还是空的，先填写再诊断', 'warn'); return; }
-  showLoading('AI 正在诊断简历…');
+  diagCtrl = new AbortController();
+  $('ai-report-body').innerHTML = `
+    <div class="ai-loading"><div class="ai-spinner"></div>
+      <p>AI 正在诊断简历，通常需要几秒到十几秒…</p>
+      <button class="btn" data-action="ai-diag-cancel">取消诊断</button></div>`;
   const content = await callKimi([
     { role: 'system', content: '你是资深 HR 与中文简历审阅专家。从 HR 视角诊断简历，只输出 JSON（不要 markdown 代码块、不要解释），格式：{"total":85,"dims":[{"name":"内容完整度","score":80,"reason":"扣分原因"},{"name":"专业度","score":80,"reason":"..."},{"name":"排版结构","score":80,"reason":"..."},{"name":"求职匹配度","score":80,"reason":"..."}],"issues":[{"section":"basic","where":"基本信息","problem":"具体问题","suggestion":"修改建议"}]}。必查高频扣分项：拼写/语法错误、时间线矛盾（结束早于开始）、信息缺失（电话/邮箱/求职意向）、措辞笼统（如只写"负责xx"）、篇幅与结构问题。每条 issue 的 section 从 basic/education/projects/work/summary 中选最相关的一个。' },
     { role: 'user', content: '请诊断这份简历：\n' + serializeResume() }
-  ]);
-  hideLoading();
-  if (!content) return;
+  ], { signal: diagCtrl.signal });
+  diagCtrl = null;
+  if (content && content.aborted) { openAiDiagnoseSetup(); toast('已取消诊断'); return; }
+  if (!content) { openAiDiagnoseSetup(); return; } // callKimi 已给出失败提示
   let report = null;
   try {
     const m = content.match(/\{[\s\S]*\}/);
@@ -1085,12 +1157,12 @@ async function aiDiagnose() {
   } catch (e) { /* 落入下方统一提示 */ }
   if (!report || typeof report.total === 'undefined' || !Array.isArray(report.issues)) {
     toast('AI 返回格式异常，请重试', 'warn');
+    openAiDiagnoseSetup();
     return;
   }
   if (!Array.isArray(report.dims)) report.dims = [];
   currentReport = report;
   renderAiReportBody();
-  $('ai-report-modal').classList.remove('hidden');
 }
 function renderAiReportBody() {
   const r = currentReport;
@@ -1111,36 +1183,101 @@ function renderAiReportBody() {
         <button class="btn btn-mini btn-primary" data-action="ai-issue-apply" data-i="${idx}" data-sec="${esc(it.section || 'basic')}">采纳</button>
       </div>
     </div>`).join('') : '<p class="ai-note">所有问题都已处理，干得漂亮！</p>'}
+    <div class="modal-actions" style="justify-content:flex-end;margin-top:12px">
+      <button class="btn" data-action="ai-diagnose">重新诊断</button>
+    </div>
   `;
 }
 
-/* ---------- 头像：选择图片 → 压缩 → base64 存草稿 ---------- */
+/* ---------- 头像：选择图片 → 裁剪（拖动/缩放/实时预览）→ base64 存草稿 ---------- */
+let crop = null;                 // 裁剪状态 {img, base, scale, dx, dy}
+const CROP_SIZE = 280;           // 裁剪画布边长（预览用）
+
 function handleAvatarFile(file) {
   if (!file || !file.type.startsWith('image/')) { toast('请选择图片文件', 'warn'); return; }
   const reader = new FileReader();
   reader.onload = () => {
     const img = new Image();
-    img.onload = () => {
-      // 统一压到最长边 240px，再逐步降质量，目标 ≤200KB
-      const max = 240;
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const w = Math.max(1, Math.round(img.width * scale));
-      const h = Math.max(1, Math.round(img.height * scale));
-      const cv = document.createElement('canvas');
-      cv.width = w; cv.height = h;
-      cv.getContext('2d').drawImage(img, 0, 0, w, h);
-      const LIMIT = 200 * 1024 * 1.37; // base64 字符数 ≈ 字节数 × 1.37
-      let q = 0.85, url = cv.toDataURL('image/jpeg', q);
-      while (url.length > LIMIT && q > 0.4) { q -= 0.15; url = cv.toDataURL('image/jpeg', q); }
-      if (url.length > LIMIT) { toast('图片太大，请换一张更小的照片', 'warn'); return; }
-      data.sections.basic.avatar = url;
-      saveData(); renderForm(); renderPreview();
-      toast('头像已更新');
-    };
+    img.onload = () => openCropper(img); // 先进入裁剪界面，而不是直接压缩
     img.onerror = () => toast('图片读取失败，请重试', 'warn');
     img.src = reader.result;
   };
   reader.readAsDataURL(file);
+}
+/* 打开裁剪：初始缩放 = 铺满方形画布（cover），任何比例原图都不留白边 */
+function openCropper(img) {
+  const base = Math.max(CROP_SIZE / img.width, CROP_SIZE / img.height);
+  crop = { img, base, scale: base, dx: 0, dy: 0 };
+  $('crop-zoom').value = 100;
+  $('avatar-crop-modal').classList.remove('hidden');
+  drawCrop();
+}
+function drawCrop() {
+  const cv = $('crop-canvas'), ctx = cv.getContext('2d');
+  const { img, scale } = crop;
+  const w = img.width * scale, h = img.height * scale;
+  // clamp：图片始终盖住整个画布（防露白边 → 保证头像完整居中不裁顶）
+  crop.dx = Math.min(0, Math.max(CROP_SIZE - w, crop.dx));
+  crop.dy = Math.min(0, Math.max(CROP_SIZE - h, crop.dy));
+  ctx.fillStyle = '#E9ECF1';
+  ctx.fillRect(0, 0, CROP_SIZE, CROP_SIZE);
+  ctx.drawImage(img, crop.dx, crop.dy, w, h);
+}
+/* 以画布中心为基准缩放，画面不跳 */
+function setCropZoom(v) {
+  v = Math.min(400, Math.max(100, v));
+  $('crop-zoom').value = v;
+  const old = crop.scale;
+  crop.scale = crop.base * v / 100;
+  crop.dx = CROP_SIZE / 2 - (CROP_SIZE / 2 - crop.dx) * (crop.scale / old);
+  crop.dy = CROP_SIZE / 2 - (CROP_SIZE / 2 - crop.dy) * (crop.scale / old);
+  drawCrop();
+}
+function bindCropper() {
+  const cv = $('crop-canvas');
+  let dragging = false, sx = 0, sy = 0;
+  cv.addEventListener('pointerdown', e => { // 拖动移动（鼠标/触屏通用）
+    dragging = true;
+    sx = e.clientX - crop.dx; sy = e.clientY - crop.dy;
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    crop.dx = e.clientX - sx; crop.dy = e.clientY - sy;
+    drawCrop();
+  });
+  const stop = () => { dragging = false; };
+  cv.addEventListener('pointerup', stop);
+  cv.addEventListener('pointercancel', stop);
+  cv.addEventListener('wheel', e => { // 滚轮缩放
+    e.preventDefault();
+    setCropZoom(+$('crop-zoom').value * (e.deltaY < 0 ? 1.06 : 0.94));
+  }, { passive: false });
+  $('crop-zoom').addEventListener('input', e => setCropZoom(+e.target.value));
+}
+/* 确认裁剪：把可视区输出为 240px 正方形 JPEG */
+function confirmCrop() {
+  const F = 240 / CROP_SIZE;
+  const out = document.createElement('canvas');
+  out.width = 240; out.height = 240;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, 240, 240);
+  ctx.drawImage(crop.img, crop.dx * F, crop.dy * F,
+    crop.img.width * crop.scale * F, crop.img.height * crop.scale * F);
+  const LIMIT = 200 * 1024 * 1.37; // base64 字符数 ≈ 字节数 × 1.37
+  let q = 0.9, url = out.toDataURL('image/jpeg', q);
+  while (url.length > LIMIT && q > 0.4) { q -= 0.15; url = out.toDataURL('image/jpeg', q); }
+  if (url.length > LIMIT) { toast('图片太大，请换一张更小的照片', 'warn'); return; }
+  data.sections.basic.avatar = url;
+  saveData(); renderForm(); renderPreview();
+  $('avatar-crop-modal').classList.add('hidden');
+  crop = null;
+  toast('头像已更新');
+}
+function cancelCrop() {
+  $('avatar-crop-modal').classList.add('hidden');
+  crop = null;
 }
 
 /* ---------- 预览 / 导出浮层 ---------- */
@@ -1236,19 +1373,6 @@ function bindEvents() {
         toast(v ? `已显示「${moduleName(id)}」` : `已隐藏「${moduleName(id)}」，预览中不再显示`);
         break;
       }
-      case 'mod-remove': { // 移除模块：只从简历拿掉，数据保留
-        data.sectionOrder = data.sectionOrder.filter(x => x !== id);
-        if (currentSection === id) currentSection = 'basic';
-        saveData(); renderSectionNav(); renderForm(); renderModulePanel(); renderPreview();
-        toast(`已移除「${moduleName(id)}」，数据保留在草稿中`);
-        break;
-      }
-      case 'mod-readd': { // 重新添加模块
-        data.sectionOrder.push(id);
-        saveData(); renderSectionNav(); renderModulePanel(); renderPreview();
-        toast(`已重新添加「${moduleName(id)}」`);
-        break;
-      }
       case 'mod-add-custom': { // 新增自定义模块
         const nid = genId();
         data.sections.custom.items.push({ id: nid, title: '', text: '', visible: true });
@@ -1288,6 +1412,8 @@ function bindEvents() {
         toast('标题主题色已更新');
         break;
       case 'avatar-upload': $('avatar-file').click(); break;
+      case 'crop-ok': confirmCrop(); break;
+      case 'crop-cancel': cancelCrop(); break;
       case 'avatar-tip-close': // 关闭头像规范提示（记住选择）
         localStorage.setItem('avatar_tip_closed', '1');
         el.closest('.avatar-tip').remove();
@@ -1310,6 +1436,19 @@ function bindEvents() {
       case 'open-export':  openExportModal(); break;
       case 'close-export': closeExportModal(); break;
       case 'modal-backdrop': if (e.target.classList.contains('modal')) e.target.classList.add('hidden'); break;
+      case 'export-menu': { // 导出合并菜单（预览/PDF/PNG/Word/JSON）
+        const dd = el.parentElement.querySelector('.dropdown');
+        const wasHidden = dd.classList.contains('hidden');
+        document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
+        dd.classList.toggle('hidden', !wasHidden);
+        break;
+      }
+      case 'json-backup': { // 面板里的「备份 / 恢复」→ 展开头部导出菜单的备份项
+        document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
+        const dd = document.querySelector('.export-switcher .dropdown');
+        if (dd) dd.classList.remove('hidden');
+        break;
+      }
       case 'export-pdf': exportPDF(); break;
       case 'export-png': exportPNG(); break;
       case 'export-word': exportWord(); break;
@@ -1343,7 +1482,15 @@ function bindEvents() {
         $('ai-result-modal').classList.add('hidden');
         toast('已保留原文');
         break;
-      case 'ai-diagnose': aiDiagnose(); break;
+      case 'ai-diagnose': openAiDiagnoseSetup(); break; // 打开诊断（先设置 key，再开始）
+      case 'ai-diag-start': {
+        const k = $('ai-diag-key').value.trim();
+        if (!k) { toast('请先填写 Kimi API key', 'warn'); break; }
+        localStorage.setItem(AI_KEY, k);
+        runDiagnosis();
+        break;
+      }
+      case 'ai-diag-cancel': if (diagCtrl) diagCtrl.abort(); break;
       case 'ai-issue-apply': { // 采纳：定位到相关区块去修改，并移除该条
         const sec = ['basic', 'education', 'projects', 'work', 'summary'].includes(el.dataset.sec) ? el.dataset.sec : 'basic';
         currentReport.issues.splice(+i, 1);
@@ -1420,6 +1567,7 @@ function bindEvents() {
   window.addEventListener('beforeprint', enterPrintMode);
   window.addEventListener('afterprint', exitPrintMode);
   bindColDnD(); // 三栏拖拽换位
+  bindCropper(); // 头像裁剪（拖动/缩放）
 }
 
 /* ---------- 启动 ---------- */

@@ -212,6 +212,27 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 .modal-body { padding: 16px 18px; overflow-y: auto; }
 .ai-note { font-size: 12px; color: var(--text-2); margin: 10px 0 14px; }
 .ai-note a { color: var(--primary); }
+
+/* 头像裁剪弹层 */
+.crop-stage { display: flex; justify-content: center; margin-bottom: 12px; }
+#crop-canvas {
+  border-radius: 10px; border: 1px solid var(--border);
+  touch-action: none; cursor: grab; max-width: 100%;
+  background: var(--panel-2);
+}
+#crop-canvas:active { cursor: grabbing; }
+.crop-zoom { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); margin-bottom: 14px; }
+.crop-zoom input { flex: 1; }
+
+/* AI 诊断加载态（可取消） */
+.ai-loading { text-align: center; padding: 26px 10px; }
+.ai-loading p { color: var(--text-2); font-size: 13px; margin: 12px 0 16px; }
+.ai-spinner {
+  width: 34px; height: 34px; margin: 0 auto; border-radius: 50%;
+  border: 3px solid var(--panel-2); border-top-color: var(--primary);
+  animation: ai-spin 1s linear infinite;
+}
+@keyframes ai-spin { to { transform: rotate(360deg); } }
 /* AI 诊断报告 */
 .ai-total { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
 .ai-total b { font-size: 34px; color: var(--primary); }
@@ -318,13 +339,21 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 
 /* ---------- 5. 编辑器（三栏布局） ---------- */
 #view-editor { display: flex; flex-direction: column; height: 100vh; }
-.editor-header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 0 16px; }
-/* 工具栏内容与编辑区同宽（1200px）居中对齐 */
+.editor-header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 0 12px; }
+/* 工具栏内容与编辑区同宽（1200px）居中对齐；整体做紧凑 */
 .editor-header-inner {
   max-width: 1200px; width: 100%; margin: 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 10px 0; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 0; flex-wrap: wrap;
 }
+.editor-header .btn { padding: 4px 10px; font-size: 12px; }
+.editor-header .tpl-select-label select { padding: 4px 6px; font-size: 12px; }
+/* 返回模板页：醒目主题色描边，和其它按钮明确区分 */
+.btn-back {
+  background: var(--primary); border-color: var(--primary); color: var(--on-primary);
+  font-weight: 600;
+}
+.btn-back:hover { background: var(--primary-hover); color: var(--on-primary); }
 .header-left, .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tpl-select-label { font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .tpl-select-label select { width: auto; padding: 6px 8px; }
@@ -341,8 +370,13 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 .col-preview { flex: 1 1 auto; min-width: 0; }
 .col-title { font-size: 13px; color: var(--text-2); margin-bottom: 10px; }
 
-/* 左栏：区块导航 */
-.section-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+/* 左栏：区块导航（吸顶固定：滚动表单时标签不动，点击直达对应表单） */
+.section-nav {
+  position: sticky; top: -16px; z-index: 40;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: -16px -16px 12px; padding: 12px 16px 10px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+}
 .section-nav button {
   border: 1px solid var(--border); background: var(--panel); color: var(--text-2);
   border-radius: 999px; padding: 5px 12px; font-size: 12px;
@@ -611,22 +645,31 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 @media (max-width: 1100px) {
   .editor-body { flex-direction: column; overflow-y: auto; }
   .col { overflow: visible; flex: none; }
-  /* 窄屏固定顺序：编辑表单 → 模块管理 → 简历预览（不受宽屏拖拽影响） */
-  .col-nav { order: 1 !important; }
-  .col-manage { order: 2 !important; }
-  .col-preview { order: 3 !important; }
-  .col-nav, .col-manage { border-right: none; border-bottom: 1px solid var(--border); }
-  /* 单列模式下表单/管理区限宽居中，避免输入框拉满全屏 */
-  .col-nav, .col-manage { max-width: 640px; width: 100%; margin: 0 auto; }
-  /* 窄屏禁用拖拽换位（固定顺序） */
-  .col-dragbar { cursor: default; }
-  .col-dragbar .drag-tip { display: none; }
-  /* 预览默认隐藏，点浮动按钮后全屏覆盖显示 */
-  .col-preview { display: none; }
+  /* 手机端固定布局：吸顶导航栏 → 表单标签（吸顶）→ 表单内容 → 模块管理 → 预览 */
+  .editor-header { position: sticky; top: 0; z-index: 50; }
+  .editor-header-inner { flex-wrap: nowrap; overflow-x: auto; padding: 6px 0; }
+  .save-status { display: none; }
+  .col-dragbar { display: none; } /* 手机端不拖拽换位 */
+  .col-nav { display: contents; } /* 标签与表单脱离栏容器，直接参与纵向排序 */
+  .section-nav {
+    order: 1; position: sticky; top: 41px; z-index: 40;
+    margin: 0; padding: 8px 12px; flex-wrap: nowrap; overflow-x: auto;
+  }
+  .section-nav button { flex-shrink: 0; }
+  .section-form {
+    order: 2; background: var(--panel); padding: 16px;
+    max-width: 640px; width: 100%; margin: 0 auto;
+  }
+  .col-manage { order: 3; max-width: 640px; width: 100%; margin: 0 auto; border-bottom: 1px solid var(--border); }
+  /* 手机版模块管理精简：只读名称列表（隐藏眼睛/上下移/删除），桌面端不变 */
+  .block-item .btn-mini { display: none; }
+  .col-preview { order: 4; display: none; }
   body.show-preview .col-preview {
     display: flex; position: fixed; inset: 0; z-index: 140;
     background: var(--bg); padding-top: 16px; overflow: auto;
   }
+  /* 手机端下拉（主题 / 导出）固定靠右弹出，不遮挡左侧内容 */
+  .dropdown { position: fixed; top: 46px; right: 12px; left: auto; max-height: 70vh; overflow: auto; }
   .btn-fab { display: block; }
   #view-editor { height: auto; min-height: 100vh; }
 }
