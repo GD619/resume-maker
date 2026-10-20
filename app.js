@@ -1570,7 +1570,7 @@ function bindEvents() {
   bindCropper(); // 头像裁剪（拖动/缩放）
 }
 
-/* ---------- 启动 ---------- */
+/* ---------- 启动（带兜底：任何一步异常都不至于让整页交互瘫痪） ---------- */
 function init() {
   if (!SKINS[data.skin] || !data.unlockedSkins.includes(data.skin)) data.skin = 'default';
   applySkin(data.skin, { silent: true });
@@ -1586,4 +1586,10 @@ function init() {
   if (!localStorage.getItem(GUIDE_KEY)) $('guide-banner').classList.remove('hidden');
   if (hadDraft) $('save-status').textContent = '草稿已恢复';
 }
-init();
+try {
+  init();
+} catch (e) {
+  // 兜底：初始化失败也尽量保住基本交互，并提示用户强制刷新（正常情况不会触发）
+  try { bindEvents(); showView('home'); } catch (_) { /* 已无能为力 */ }
+  setTimeout(() => toast('页面初始化遇到问题，请按 Ctrl+F5 强制刷新一次', 'warn'), 400);
+}
