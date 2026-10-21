@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>简历工坊 · 在线简历制作</title>
+  <link rel="stylesheet" href="style.css?v=5.1">
+  <!-- 导出依赖全部本地化（assets/），离线可用：
+       html2canvas v1.4.1（导出 PNG）、docx v8.5.0（导出真 Word .docx）
+       注意：引用统一带 ?v= 版本号，防止浏览器缓存新旧文件混用导致脚本中断 -->
+  <script src="assets/html2canvas.min.js?v=1.4.1" defer></script>
+  <script src="assets/docx.umd.js?v=8.5.0" defer></script>
+  <script src="app.js?v=5.1" defer></script>
+</head>
+<body>
+  <noscript>简历工坊需要开启 JavaScript 才能使用。</noscript>
+
+  <div id="app">
+
+    <!-- ========== 视图一：首页（模板选择页） ========== -->
+    <section id="view-home" class="view">
+      <header class="home-header">
+        <div class="brand">
+          <div class="brand-row">
+            <!-- 吉祥物：简历小人（内联 SVG，颜色随皮肤变量） -->
+            <svg class="brand-mascot" viewBox="0 0 64 64" aria-hidden="true">
+              <rect x="12" y="6" width="40" height="52" rx="9" fill="var(--panel)" stroke="currentColor" stroke-width="2.5"/>
+              <path d="M20 15 h18" stroke="var(--primary)" stroke-width="3.5" stroke-linecap="round"/>
+              <circle cx="25" cy="27" r="3" fill="currentColor"/><circle cx="39" cy="27" r="3" fill="currentColor"/>
+              <path d="M26 36 q6 6 12 0" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M20 46 h24 M20 51 h15" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+              <path d="M50 2 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6 z" fill="var(--primary)"/>
+            </svg>
+            <h1>简历工坊</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <!-- 皮肤切换入口（JS 渲染，首页右上角） -->
+          <div id="skin-menu-home" class="skin-switcher"></div>
+        </div>
+      </header>
+
+      <!-- 首次进入引导（JS 控制显隐） -->
+      <div id="guide-banner" class="guide-banner hidden">
+        <div class="guide-steps">
+          <strong>新手引导：</strong>只需 3 步 ——
+          <span>① 在下面选一套模板</span>
+          <span>② 在编辑器里填写内容（自动保存）</span>
+          <span>③ 点「导出 PDF / PNG」下载简历</span>
+        </div>
+        <button class="btn btn-text" data-action="guide-close">知道了</button>
+      </div>
+
+      <!-- 已有草稿时显示「继续编辑」（JS 控制显隐） -->
+      <div id="continue-bar" class="continue-bar hidden">
+        <span>检测到你有一份未完成的简历草稿。</span>
+        <button class="btn btn-primary" data-action="continue-edit">继续编辑我的简历</button>
+      </div>
+
+      <main class="template-section">
+        <h2 class="section-heading">选择模板 <small>（切换模板不会丢失已填内容）</small></h2>
+        <!-- 模板卡片由 JS 根据 TEMPLATES 配置渲染 -->
+        <div id="template-grid" class="template-grid"></div>
+      </main>
+
+      <section class="features">
+        <h2 class="section-heading">功能亮点</h2>
+        <div class="feature-grid">
+          <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div><h3>实时预览</h3><p>边填边看，A4 版式所见即所得</p></div>
+          <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div><h3>一键导出</h3><p>导出 PDF / PNG，排版干净无截断</p></div>
+          <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></div><h3>本地保存</h3><p>草稿自动存入浏览器，刷新不丢失</p></div>
+          <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18V3z" fill="currentColor" stroke="none"/></svg></div><h3>皮肤切换</h3><p>浅色 / 深色护眼，界面风格随心换</p></div>
+        </div>
+      </section>
+
+      <footer class="home-footer">简历工坊 · 数据仅保存在本地浏览器，不上传服务器</footer>
+    </section>
+
+    <!-- ========== 视图二：编辑器页（三栏布局） ========== -->
+    <section id="view-editor" class="view hidden">
+      <!-- 头部背景通栏，内容限宽 1200px 居中，与编辑区对齐 -->
+      <header class="editor-header">
+        <div class="editor-header-inner">
+          <div class="header-left">
+            <button class="btn btn-back" data-action="back-home">← 模板页</button>
+            <label class="tpl-select-label">模板
+              <select id="template-select"></select>
+            </label>
+            <label class="tpl-select-label">字体
+              <select id="font-select"></select>
+            </label>
+          </div>
+          <div class="header-right">
+            <span id="save-status" class="save-status"></span>
+            <!-- 导出合并：预览/PDF/PNG/Word/JSON 备份 统一点这里展开（主题切换只在主页） -->
+            <div class="export-switcher skin-switcher">
+              <button class="btn btn-primary" data-action="export-menu">导出 ▾</button>
+              <div class="dropdown hidden">
+                <button class="dropdown-item" data-action="open-export">整页预览</button>
+                <button class="dropdown-item" data-action="export-pdf">导出 PDF</button>
+                <button class="dropdown-item" data-action="export-png">导出 PNG</button>
+                <button class="dropdown-item" data-action="export-word">导出 Word（.docx）</button>
+                <button class="dropdown-item" data-action="export-json">导出 JSON 备份</button>
+                <button class="dropdown-item" data-action="import-json">导入 JSON</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="editor-body">
+        <!-- 左栏：区块导航 + 当前区块表单 -->
+        <aside id="col-nav" class="col col-nav">
+          <!-- 拖拽标题栏：拖动它可以把本面板换到左/中/右 -->
+          <div class="col-dragbar" draggable="true" data-col="nav" title="拖拽标题栏可调整面板位置">
+            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+            <span>编辑表单</span><span class="drag-tip">拖拽换位</span>
+          </div>
+          <nav id="section-nav" class="section-nav" aria-label="区块导航"></nav>
+          <div id="section-form" class="section-form"></div>
+        </aside>
+
+        <!-- 中栏：模块管理面板（排序 + 显隐 + 移除/添加模块 + 标题对齐 + 主题色 + JSON 备份） -->
+        <aside id="col-manage" class="col col-manage">
+          <div class="col-dragbar" draggable="true" data-col="manage" title="拖拽标题栏可调整面板位置">
+            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+            <span>模块管理</span><span class="drag-tip">拖拽换位</span>
+          </div>
+          <div class="layout-row">
+            <label for="title-align-select">标题对齐</label>
+            <select id="title-align-select" data-layout="titleAlign">
+              <option value="left">靠左</option>
+              <option value="center">居中</option>
+            </select>
+          </div>
+          <div class="palette-label">标题主题色</div>
+          <div id="palette" class="palette"></div>
+          <ul id="block-list" class="block-list"></ul>
+          <button class="btn add-item-btn" data-action="mod-add-custom">+ 添加自定义模块</button>
+          <div class="manage-tools">
+            <button class="btn" data-action="ai-diagnose">AI 诊断评分</button>
+            <button class="btn" data-action="json-backup">备份 / 恢复（JSON）</button>
+            <!-- 隐藏的文件选择框：JSON 导入与头像上传共用入口触发 -->
+            <input type="file" id="import-file" accept=".json,application/json" hidden>
+            <input type="file" id="avatar-file" accept="image/*" hidden>
+          </div>
+          <button class="btn btn-danger-text" data-action="reset-all">清空全部内容</button>
+        </aside>
+
+        <!-- 右栏：A4 实时预览 -->
+        <main id="col-preview" class="col col-preview">
+          <div class="col-dragbar" draggable="true" data-col="preview" title="拖拽标题栏可调整面板位置">
+            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+            <span>简历预览</span><span class="drag-tip">拖拽换位</span>
+          </div>
+          <div id="preview-viewport" class="preview-viewport">
+            <!-- A4 页面：794×1123px（96dpi），JS 按容器宽度缩放 -->
+            <div id="resume-preview" class="resume-preview"></div>
+          </div>
+        </main>
+      </div>
+
+      <!-- 窄屏（手机）时浮动预览切换按钮 -->
+      <button id="btn-toggle-preview" class="btn btn-primary btn-fab" data-action="toggle-preview">预览</button>
+    </section>
+
+    <!-- ========== 预览 / 导出浮层 ========== -->
+    <div id="export-modal" class="modal hidden" data-action="modal-backdrop">
+      <div class="modal-panel">
+        <header class="modal-header">
+          <h3>整页预览</h3>
+          <div class="modal-actions">
+            <button class="btn" data-action="export-png">导出 PNG</button>
+            <button class="btn btn-primary" data-action="export-pdf">导出 PDF</button>
+            <button class="btn btn-text" data-action="close-export">关闭</button>
+          </div>
+        </header>
+        <div id="export-preview-box" class="export-preview-box"><!-- JS 放入预览副本 --></div>
+      </div>
+    </div>
+
+    <!-- toast 轻提示容器 -->
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  </div>
+
+  <!-- ===== 皮肤专属装饰（按 html[data-skin] 显示对应一套，均不遮挡操作） ===== -->
+  <!-- 深色：大月亮 + 流星 -->
+  <div class="skin-deco deco-dark" aria-hidden="true">
+    <svg viewBox="0 0 120 120" width="100%">
+      <defs>
+        <radialGradient id="moon-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#F7DC9B" stop-opacity=".5"/>
+          <stop offset="100%" stop-color="#F7DC9B" stop-opacity="0"/>
+        </radialGradient>
+        <mask id="moon-cut"><rect width="120" height="120" fill="#fff"/><circle cx="80" cy="44" r="26" fill="#000"/></mask>
+      </defs>
+      <circle cx="60" cy="60" r="58" fill="url(#moon-glow)"/>
+      <circle cx="60" cy="58" r="30" fill="#F5D89A" mask="url(#moon-cut)"/>
+      <circle cx="26" cy="26" r="2.2" fill="#E8C97F"/><circle cx="96" cy="88" r="1.8" fill="#E8C97F"/>
+      <circle cx="102" cy="24" r="1.5" fill="#E8C97F"/><circle cx="18" cy="82" r="1.5" fill="#E8C97F"/>
+    </svg>
+  </div>
+  <div class="skin-deco deco-stars" aria-hidden="true">
+    <i class="meteor m1"></i><i class="meteor m2"></i><i class="meteor m3"></i>
+    <i class="meteor m4"></i><i class="meteor m5"></i><i class="meteor m6"></i><i class="meteor m7"></i>
+    <i class="twinkle t1"></i><i class="twinkle t2"></i><i class="twinkle t3"></i>
+    <i class="twinkle t4"></i><i class="twinkle t5"></i><i class="twinkle t6"></i>
+  </div>
+  <!-- 浅色：柔和小太阳 + 云朵（与深色月亮日夜呼应） -->
+  <div class="skin-deco deco-day" aria-hidden="true">
+    <svg viewBox="0 0 160 120" width="100%">
+      <defs>
+        <radialGradient id="sun-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#F8D98C" stop-opacity=".55"/>
+          <stop offset="100%" stop-color="#F8D98C" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <circle cx="58" cy="52" r="46" fill="url(#sun-glow)"/>
+      <circle cx="58" cy="52" r="22" fill="#F6D68A"/>
+      <g fill="#FFFFFF" stroke="#D9E2EF" stroke-width="2">
+        <path d="M96 84 a10 10 0 0 1 10-10 a12 12 0 0 1 23 3 a9 9 0 0 1 8 9 a8 8 0 0 1-8 8 h-33 a10 10 0 0 1 0-10z"/>
+        <path d="M14 92 a8 8 0 0 1 8-8 a10 10 0 0 1 19 2 a7 7 0 0 1 7 8 a6 6 0 0 1-6 6 h-22 a8 8 0 0 1-6-8z"/>
+      </g>
+    </svg>
+  </div>
+  <!-- 多彩活力：彩虹 + 云朵 -->
+  <div class="skin-deco deco-vivid" aria-hidden="true">
+    <svg viewBox="0 0 160 120" width="100%">
+      <g fill="none" stroke-linecap="round">
+        <path d="M30 96 a50 50 0 0 1 100 0" stroke="#E97293" stroke-width="9"/>
+        <path d="M40 96 a40 40 0 0 1 80 0" stroke="#F0B43C" stroke-width="9"/>
+        <path d="M50 96 a30 30 0 0 1 60 0" stroke="#2A9D8F" stroke-width="9"/>
+      </g>
+      <g fill="#FFFFFF" stroke="#E2D9C8" stroke-width="2">
+        <path d="M12 96 a9 9 0 0 1 9-9 a11 11 0 0 1 21 3 a8 8 0 0 1 7 9 a7 7 0 0 1-7 7 h-24 a9 9 0 0 1-6-10z"/>
+        <path d="M112 96 a9 9 0 0 1 9-9 a11 11 0 0 1 21 3 a8 8 0 0 1 7 9 a7 7 0 0 1-7 7 h-24 a9 9 0 0 1-6-10z"/>
+      </g>
+    </svg>
+  </div>
+  <!-- 糖果粉：爱心与星星 -->
+  <div class="skin-deco deco-candy" aria-hidden="true">
+    <svg viewBox="0 0 160 120" width="100%">
+      <path d="M60 88 c-16-12-26-22-26-33 a13 13 0 0 1 26-4 a13 13 0 0 1 26 4 c0 11-10 21-26 33z" fill="#F2A0C4"/>
+      <path d="M118 60 c-9-7-15-13-15-19 a8 8 0 0 1 15-2 a8 8 0 0 1 15 2 c0 6-6 12-15 19z" fill="#F6C1D9"/>
+      <path d="M126 14 l2.4 6 6 2.4 -6 2.4 -2.4 6 -2.4 -6 -6 -2.4 6 -2.4 z" fill="#EFA6C8"/>
+      <circle cx="34" cy="26" r="3" fill="#F6C1D9"/><circle cx="140" cy="88" r="2.5" fill="#EFA6C8"/>
+    </svg>
+  </div>
+  <!-- 卡通贴图：只保留右上角一小簇（小鸡 + 星星），z-index:-1 沉到内容底下，绝不遮挡文字 -->
+  <div class="stickers" aria-hidden="true">
+    <svg class="stk stk-chick" viewBox="0 0 72 72">
+      <circle cx="36" cy="40" r="24" fill="#FFD966" stroke="#E8B93E" stroke-width="2.5"/>
+      <circle cx="29" cy="36" r="3" fill="#4A3B2A"/><circle cx="44" cy="36" r="3" fill="#4A3B2A"/>
+      <path d="M33 43 l4 3 4-3 -4-2z" fill="#F29B4B"/>
+      <path d="M14 44 a10 10 0 0 1 12 6" fill="none" stroke="#E8B93E" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M30 15 l2 4 4 1 -4 2 -1 4 -2-4 -4-1 4-2z" fill="#F29B4B"/>
+    </svg>
+    <svg class="stk stk-star" viewBox="0 0 40 40">
+      <path d="M20 4 l4.2 9.4 10.2 1 -7.6 6.8 2.2 10 -9-5.4 -9 5.4 2.2-10 -7.6-6.8 10.2-1z" fill="#FFD66B" stroke="#E8B93E" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="16" cy="18" r="1.6" fill="#4A3B2A"/><circle cx="24" cy="18" r="1.6" fill="#4A3B2A"/>
+    </svg>
+  </div>
+
+  <!-- 头像裁剪弹层：拖动移动、滑块/滚轮缩放，实时预览，确认后保存 -->
+  <div id="avatar-crop-modal" class="modal hidden" data-action="modal-backdrop">
+    <div class="modal-panel modal-panel-sm">
+      <header class="modal-header">
+        <h3>裁剪头像</h3>
+        <div class="modal-actions"><button class="btn btn-text" data-action="crop-cancel">取消</button></div>
+      </header>
+      <div class="modal-body">
+        <p class="ai-note">拖动图片调整位置，用滑块（或滚轮）缩放，保证头像完整、居中、不裁顶。</p>
+        <div class="crop-stage"><canvas id="crop-canvas" width="280" height="280"></canvas></div>
+        <div class="crop-zoom">
+          <span>缩放</span>
+          <input type="range" id="crop-zoom" min="100" max="400" value="100">
+        </div>
+        <div class="modal-actions" style="justify-content:flex-end">
+          <button class="btn" data-action="crop-cancel">取消</button>
+          <button class="btn btn-primary" data-action="crop-ok">确认使用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 设置弹层（Kimi API key，仅存本地） -->
+  <div id="ai-settings-modal" class="modal hidden" data-action="modal-backdrop">
+    <div class="modal-panel modal-panel-sm">
+      <header class="modal-header">
+        <h3>AI 设置</h3>
+        <div class="modal-actions"><button class="btn btn-text" data-action="ai-close">关闭</button></div>
+      </header>
+      <div class="modal-body">
+        <div class="field">
+          <label>Kimi API key（仅保存在本地浏览器，不会上传）</label>
+          <input type="password" id="ai-key-input" placeholder="sk-xxxxxxxx" autocomplete="off">
+        </div>
+        <p class="ai-note">没有 key？到 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">platform.moonshot.cn</a>（Kimi 开放平台）注册即可免费申请。</p>
+        <button class="btn btn-primary" data-action="ai-key-save">保存 key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 美化结果弹层（可选「用 AI 结果」或「保留原文」） -->
+  <div id="ai-result-modal" class="modal hidden" data-action="modal-backdrop">
+    <div class="modal-panel modal-panel-sm">
+      <header class="modal-header">
+        <h3>AI 美化结果</h3>
+        <div class="modal-actions"><button class="btn btn-text" data-action="ai-close">关闭</button></div>
+      </header>
+      <div class="modal-body">
+        <div class="field"><label>美化后的内容（可再手动微调）</label>
+          <textarea id="ai-result-text" rows="7"></textarea></div>
+        <div class="modal-actions" style="justify-content:flex-end">
+          <button class="btn" data-action="ai-cancel">保留原文</button>
+          <button class="btn btn-primary" data-action="ai-apply">用 AI 结果</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 诊断报告弹层 -->
+  <div id="ai-report-modal" class="modal hidden" data-action="modal-backdrop">
+    <div class="modal-panel">
+      <header class="modal-header">
+        <h3>AI 诊断报告</h3>
+        <div class="modal-actions"><button class="btn btn-text" data-action="ai-close">关闭</button></div>
+      </header>
+      <div id="ai-report-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- 导出图片时的可爱加载层 -->
+  <div id="loading-mask" class="loading-mask hidden" aria-live="polite">
+    <div class="loading-box">
+      <svg class="loading-mascot" viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="12" y="6" width="40" height="52" rx="9" fill="var(--panel)" stroke="currentColor" stroke-width="2.5"/>
+        <circle cx="25" cy="27" r="3" fill="currentColor"/><circle cx="39" cy="27" r="3" fill="currentColor"/>
+        <path d="M26 36 q6 6 12 0" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M20 15 h18 M20 46 h24 M20 51 h15" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+      </svg>
+      <p id="loading-text">正在生成图片…</p>
+    </div>
+  </div>
+</body>
+</html>

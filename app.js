@@ -1615,16 +1615,22 @@ function bindEvents() {
         saveData(); renderForm(); renderPreview();
         toast('头像已删除');
         break;
-      case 'reset-all':
-        if (confirm('确定清空全部简历内容吗？此操作不可恢复。')) {
-          const { skin, unlockedSkins } = data;
-          data = defaultData();
-          data.skin = skin; data.unlockedSkins = unlockedSkins;
-          saveData(); currentSection = 'basic';
-          refreshAll();
-          toast('已清空，可以重新开始');
-        }
+      case 'reset-all': // 弹出自定义确认弹窗（手机端导航「清空内容」+ 电脑端面板「清空全部内容」共用）
+        $('reset-modal').classList.remove('hidden');
         break;
+      case 'reset-cancel':
+        $('reset-modal').classList.add('hidden');
+        break;
+      case 'reset-confirm': { // 确认后才真正清空
+        $('reset-modal').classList.add('hidden');
+        const { skin, unlockedSkins } = data;
+        data = defaultData();
+        data.skin = skin; data.unlockedSkins = unlockedSkins;
+        saveData(); currentSection = 'basic';
+        refreshAll();
+        toast('已清空，可以重新开始');
+        break;
+      }
       case 'open-export':  openExportModal(); break;
       case 'close-export': closeExportModal(); break;
       case 'modal-backdrop':

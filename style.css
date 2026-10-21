@@ -385,6 +385,22 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 .btn-ic { padding: 4px 9px; font-size: 14px; line-height: 1.2; } /* 撤销 / 重做小按钮 */
 .btn:disabled { opacity: .45; cursor: default; }
 .btn:disabled:hover { border-color: var(--border); color: var(--text-2); }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; opacity: .88; }
+/* 手机端导航分行辅助：强制换行元素 / 清空内容按钮 / 间距按钮短文案 —— 电脑端全部隐藏、布局不变 */
+.flex-break { display: none; }
+.btn-clear-nav {
+  display: none;
+  color: var(--danger); border-color: var(--danger); background: transparent; white-space: nowrap;
+}
+.btn-clear-nav:hover { background: rgba(220, 38, 38, .08); color: var(--danger); }
+.t-short { display: none; }
+/* 清空确认弹窗 */
+.reset-panel { width: min(360px, 88vw); }
+.reset-body { padding: 26px 20px 18px; }
+.reset-text { text-align: center; font-size: 14px; margin-bottom: 20px; }
+.reset-actions { justify-content: center; gap: 14px; }
+.reset-actions .btn { min-width: 96px; }
 .save-status { font-size: 12px; color: var(--text-2); white-space: nowrap; }
 
 /* 编辑区限宽 1200px 居中：flex 布局 + order 属性支持三栏拖拽换位（宽度跟随面板而非位置） */
@@ -685,19 +701,42 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 @media (max-width: 1100px) {
   .editor-body { flex-direction: column; overflow-y: auto; }
   .col { overflow: visible; flex: none; }
-  /* 手机端固定布局：吸顶导航（第一行：模板页/模板/字体/主题；第二行：标题对齐/间距设置/撤销重做/导出；第三行：标签栏）→ 表单 → 模块管理 */
-  .editor-header { position: sticky; top: 0; z-index: 50; }
-  .editor-header-inner { flex-wrap: wrap; overflow-x: visible; padding: 6px 0; row-gap: 6px; }
-  .header-left { order: 1; flex: 0 0 100%; flex-wrap: nowrap; overflow-x: auto; }
-  .header-right { order: 2; flex: 0 0 100%; flex-wrap: nowrap; overflow-x: auto; margin-left: 0; justify-content: flex-start; }
-  /* 手机端：标签栏在导航栏第三行（吸顶随 header），可左右滑动 */
+  /* 手机端固定布局：吸顶导航四行（主页 / 模板·字体·主题·间距 / 标题对齐·撤销重做·清空·导出 / 标签栏）→ 表单 → 模块管理 */
+  .editor-header {
+    position: sticky; top: 0; z-index: 50;
+    /* 导航栏（含标签行）背景半透明：透出后面的主题底色与卡通贴纸；按钮自身不透明不受影响 */
+    background: var(--panel); /* 兜底：不支持 color-mix 的浏览器保持原样 */
+    background: color-mix(in srgb, var(--panel) 64%, transparent);
+    backdrop-filter: blur(10px) saturate(1.1);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  }
+  .editor-header-inner { flex-wrap: wrap; overflow-x: visible; padding: 6px 0; row-gap: 6px; column-gap: 6px; } /* 列距收紧：滚动条占宽的桌面模拟器上第三行也放得下 */
+  .header-left, .header-right { display: contents; } /* 拆解桌面端的两组，按钮按 order 分配到各行 */
+  /* 第一行：只有「主页」（顶部留给摄像头区域，不堆功能） */
+  .header-left > .btn-back { order: 1; }
+  .flex-break { display: block; flex: 0 0 100%; height: 0; order: 2; }
+  /* 第二行：模板 / 字体 / 主题 / 间距 */
+  .header-left > .picker:nth-of-type(1) { order: 3; }
+  .header-left > .picker:nth-of-type(2) { order: 4; }
+  .header-left > .picker:nth-of-type(3) { order: 5; }
+  .header-right > [data-action="spacing-open"] { order: 6; }
+  .flex-break-2 { order: 7; }
+  /* 第三行：标题对齐 / 撤销 / 重做 / 清空内容 / 导出 */
+  .header-right > .picker:nth-of-type(1) { order: 8; }
+  .header-right > [data-action="undo"] { order: 9; }
+  .header-right > [data-action="redo"] { order: 10; }
+  .header-right > .btn-clear-nav { display: inline-block; order: 11; }
+  .header-right > .export-switcher { order: 12; }
+  /* 第四行：标签栏（位置不变，吸顶随 header；随导航栏一起做半透明） */
   #section-nav {
     display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none;
-    order: 3; flex: 0 0 100%; justify-content: flex-start; padding-bottom: 2px;
+    order: 13; flex: 0 0 100%; justify-content: flex-start; padding-bottom: 2px;
   }
   #section-nav::-webkit-scrollbar { display: none; }
   .section-nav-side { display: none; } /* 手机端：面板内标签栏隐藏（标签栏在导航栏上） */
   .section-nav .nav-add { display: inline-block; border-style: dashed; } /* 标签栏末尾「+」添加自定义模块 */
+  .t-full { display: none; } .t-short { display: inline; } /* 手机端按钮文案：间距设置 → 间距 */
+  .col-manage [data-action="reset-all"] { display: none; } /* 手机端：清空按钮移到导航第三行，面板底部那个删掉 */
   .picker-btn { max-width: 38vw; } /* 长模板名/字体名省略，防止撑破导航行 */
   .save-status { display: none; }
   .col-dragbar { display: none; } /* 手机端不拖拽换位 */
@@ -707,9 +746,8 @@ html[data-skin="candy"] .stickers { opacity: .85; }
     max-width: 640px; width: 100%; margin: 0 auto;
     scroll-margin-top: calc(var(--mnav-h, 120px) + 8px); /* 点标签滚动时避开吸顶导航（--mnav-h 由 JS 实测写入） */
   }
-  .col-manage { order: 3; max-width: 640px; width: 100%; margin: 0 auto; border-bottom: 1px solid var(--border); }
-  /* 手机版模块管理精简：标题对齐/主题色板收进导航按钮；AI 诊断/JSON 备份收进预览弹窗；
-     模块列表整排删除 → 手机端页面最底部只剩「清空全部内容」（电脑端全部保留） */
+  .col-manage { display: none; } /* 手机端：模块管理面板功能已全部收进导航/预览弹窗（清空内容也移到导航），整个面板不再需要 */
+  /* 手机版模块管理精简规则（面板已整体隐藏，以下保留作兜底） */
   .block-item .btn-mini { display: none; }
   .col-manage .layout-row, .col-manage > .palette-label, .col-manage #palette,
   .col-manage #block-list, .col-manage .manage-tools, .col-manage .add-item-btn { display: none; }
