@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>简历工坊 · 在线简历制作</title>
-  <link rel="stylesheet" href="style.css?v=9.0">
+  <link rel="stylesheet" href="style.css?v=11.1">
   <!-- 导出依赖全部本地化（assets/），离线可用：
-       html2canvas v1.4.1（导出 PNG）、docx v8.5.0（导出真 Word .docx）
+       html2canvas v1.4.1（PNG/PDF 渲染）、docx v8.5.0（导出真 Word .docx）、jsPDF v2.5.1（PDF 直接下载，不走打印对话框）
        注意：引用统一带 ?v= 版本号，防止浏览器缓存新旧文件混用导致脚本中断 -->
   <script src="assets/html2canvas.min.js?v=1.4.1" defer></script>
   <script src="assets/docx.umd.js?v=8.5.0" defer></script>
-  <script src="app.js?v=9.0" defer></script>
+  <script src="assets/jspdf.umd.min.js?v=2.5.1" defer></script>
+  <script src="app.js?v=11.1" defer></script>
 </head>
 <body>
   <noscript>简历工坊需要开启 JavaScript 才能使用。</noscript>
@@ -82,7 +83,7 @@
       <header class="editor-header">
         <div class="editor-header-inner">
           <div class="header-left">
-            <button class="btn btn-back" data-action="back-home">主页</button>
+            <button class="btn btn-back" data-action="back-home">返回主页</button>
             <!-- 模板 / 字体 / 主题：按钮 + 弹出列表（JS 浮层定位在导航栏外），按钮上始终显示当前选中项 -->
             <div class="picker skin-switcher">
               <button class="btn picker-btn" data-action="picker-menu" id="btn-tpl-picker">模板：简洁 ▾</button>

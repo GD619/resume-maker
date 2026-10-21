@@ -84,6 +84,7 @@ button { font-family: inherit; cursor: pointer; }
 .skin-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); }
 .dropdown {
   position: absolute; right: 0; top: calc(100% + 6px); min-width: 168px;
+  max-width: calc(100vw - 16px); /* 自适应屏幕宽度：任何下拉都不超出屏幕边界 */
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: var(--shadow-lg); padding: 6px; z-index: 250; /* 浮层：高于 modal(200)，JS 用 fixed 按按钮位置放置 */
 }
@@ -530,9 +531,9 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 /* 注意：预览区颜色自成体系（白底黑字），不随网站皮肤变化，保证导出效果一致 */
 .resume-preview {
   width: 794px;              /* A4 @96dpi ≈ 210mm */
-  min-height: 1123px;        /* A4 @96dpi ≈ 297mm */
-  background: #fff; color: #2B2B2B;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
+  color: #2B2B2B;
+  /* A4 多页效果：容器本身透明（只起排列作用），内容被装成一页页 .rp-page（每张都是完整 A4） */
+  background: transparent;
   transform-origin: top center; /* JS 按容器宽度设置 scale */
   font-size: 13.5px;
   /* 行间距：由「间距设置」通过 --resume-line-height 注入，默认 1.65 */
@@ -541,6 +542,24 @@ html[data-skin="candy"] .stickers { opacity: .85; }
   font-family: var(--resume-font, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif);
   --resume-theme: #1F4E8C;   /* 简历主题色（第二轮可做切换，默认商务蓝） */
 }
+/* 每一页都是一整张标准 A4 纸（794×1123 ≈ 210×297mm），白底、独立阴影；
+   内容装盒到页内（overflow hidden），绝不溢出到背景上 */
+.rp-page {
+  position: relative;
+  width: 794px; height: 1123px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
+  margin-bottom: 16px;         /* 页间拼接缝：透出页面背景，两页界限分明 */
+  overflow: hidden;
+}
+.rp-page:last-child { margin-bottom: 0; }
+/* 页间分隔虚线：一眼看出「这里分页了」（PDF 导出的分页位置与此一致） */
+.rp-page + .rp-page::before {
+  content: ''; position: absolute; top: -9px; left: 4%; right: 0;
+  border-top: 2px dashed #98A4B8; z-index: 2;
+}
+/* 后续页的页首元素不留模块间距（第一页正常保留） */
+.rp-page:not(:first-child) .rp-inner > .rp-section:first-child { margin-top: 0; }
 .resume-preview.fs-small { font-size: 12.5px; }
 .resume-preview.fs-large { font-size: 14.5px; }
 .resume-preview .ph { color: #B9BFC9; } /* 预览占位提示文字 */
@@ -783,6 +802,12 @@ html[data-skin="candy"] .stickers { opacity: .85; }
     margin: 0; box-shadow: none;
     font-size: 13.5px;
   }
+  /* 手动打印兜底：每页容器本身就是 297mm（1123px），一页容器一张纸、不跨页切断 */
+  #resume-preview.print-mode .rp-page {
+    box-shadow: none; margin-bottom: 0;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  #resume-preview.print-mode .rp-page::before { display: none; } /* 分隔虚线不打印 */
   /* 内容超一页时自然分页，避免条目被硬切断 */
   .rp-item, .rp-skill { break-inside: avoid; }
 }

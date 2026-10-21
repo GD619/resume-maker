@@ -551,8 +551,14 @@ function placeDropdown(btn, dd) {
     dd.style.position = 'fixed';
     dd.style.left = 'auto'; dd.style.right = 'auto'; dd.style.bottom = 'auto';
     const w = dd.offsetWidth, h = dd.offsetHeight;
-    let left = r.left;
-    if (left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - w); // 防超出右屏
+    let left;
+    if (dd.classList.contains('dropdown-swatches') && window.innerWidth <= 1100) {
+      // 主题颜色面板（手机端）：不管按钮在哪都水平居中展开，绝不超出屏幕边界
+      left = Math.max(8, (window.innerWidth - w) / 2);
+    } else {
+      left = r.left;
+      if (left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - w); // 防超出右屏
+    }
     dd.style.left = left + 'px';
     dd.style.top = dd.classList.contains('dropdown-up')
       ? Math.max(8, r.top - h - 6) + 'px'
@@ -876,6 +882,7 @@ const filled = (items, keys) => items.filter(it => keys.some(k => String(it[k]).
 /* 区块标题统一结构：色块（清新模板用）+ 标题文字 + 装饰线（简洁模板用），均为真实元素 */
 const secTitle = t => `<div class="rp-sec-title"><span class="rp-sec-sq"></span>${t}<span class="rp-sec-line"></span></div>`;
 
+/* 数据卡片模板专用：整卡区块 HTML（卡片不拆分） */
 function sectionHtml(id) {
   if (!secVisible(id) || sectionEmpty(id)) return '';
   if (isCustomId(id)) {
@@ -885,32 +892,204 @@ function sectionHtml(id) {
   }
   const def = SECTION_DEFS[id], sec = data.sections[id];
   let body = '';
-  if (id === 'education') {
-    body = filled(sec.items, ['school', 'major', 'degree', 'gpa', 'courses', 'honors', 'start', 'end']).map(it => `
-      <div class="rp-item"><i class="rp-dot"></i>
-        <div class="rp-item-head"><span class="rp-item-title">${esc(it.school)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
-        <div class="rp-item-sub">${[it.degree, it.major, it.gpa && `GPA ${it.gpa}`].filter(Boolean).map(esc).join(' · ')}</div>
-        ${it.courses.trim() ? `<div class="rp-item-desc">主修课程：${esc(it.courses)}</div>` : ''}
-        ${it.honors && it.honors.trim() ? `<div class="rp-item-desc">荣誉 / 证书：${esc(it.honors)}</div>` : ''}
-      </div>`).join('');
-  } else if (id === 'projects') {
-    body = filled(sec.items, ['name', 'role', 'tech', 'desc', 'start', 'end']).map(it => `
-      <div class="rp-item"><i class="rp-dot"></i>
-        <div class="rp-item-head"><span class="rp-item-title">${esc(it.name)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
-        <div class="rp-item-sub">${[it.role, it.tech].filter(Boolean).map(esc).join(' · ')}</div>
-        ${it.desc.trim() ? `<div class="rp-item-desc">${esc(it.desc)}</div>` : ''}
-      </div>`).join('');
-  } else if (id === 'work') {
-    body = filled(sec.items, ['company', 'role', 'desc', 'start', 'end']).map(it => `
-      <div class="rp-item"><i class="rp-dot"></i>
-        <div class="rp-item-head"><span class="rp-item-title">${esc(it.company)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
-        <div class="rp-item-sub">${esc(it.role)}</div>
-        ${it.desc.trim() ? `<div class="rp-item-desc">${esc(it.desc)}</div>` : ''}
-      </div>`).join('');
-  } else { // summary / coreSkills（纯文本区块，pre-wrap 保留换行）
+  if (def.type === 'text') {
     body = `<div class="rp-item"><div class="rp-item-desc">${esc(sec.text)}</div></div>`;
+  } else {
+    body = filled(sec.items, LIST_KEYS[id]).map(it => itemHtml(id, it)).join('');
   }
   return `<section class="rp-section">${secTitle(esc(def.title))}${body}</section>`;
+}
+
+/* ---------- 预览：A4 多页渲染（装盒分页） ----------
+   流程：把内容生成「平铺单位」（页头 / 区块标题 / 条目整块 / 文本逐行）→ 隐藏测量各自高度 →
+   装盒进一页页完整 A4（794×1123）。规则：
+   ① 每一页都是一整张 A4（不多不少），页间 16px 拼接缝 + 分隔虚线；
+   ② 当前页放不下就整块/整行进下一页 —— 绝不把一块、一行从中间截断；
+   ③ 页内容严格限制在页内（overflow hidden），绝不溢出到背景；
+   ④ PDF 直接下载就是按这些 .rp-page 逐页切片 —— 屏幕分隔线位置 = PDF 分页位置。 */
+const A4_PAGE_H = 1123;                          // A4 高 @96dpi ≈ 297mm
+const PAGE_PAD = { inner: 84, creative: 72, sidebar: 80 }; // 页内上下边距合计（rp-inner 42×2 / 双栏 36×2 或 40×2）
+
+/* 条目的 list 数据 key 表（过滤空行用，与字段定义一致） */
+const LIST_KEYS = {
+  education: ['school', 'major', 'degree', 'gpa', 'courses', 'honors', 'start', 'end'],
+  projects: ['name', 'role', 'tech', 'desc', 'start', 'end'],
+  work: ['company', 'role', 'desc', 'start', 'end']
+};
+
+/* 条目整块 HTML（教育 / 项目 / 工作；与打印 break-inside:avoid 一致，整块不可分割） */
+function itemHtml(id, it) {
+  if (id === 'education') return `<div class="rp-item"><i class="rp-dot"></i>
+    <div class="rp-item-head"><span class="rp-item-title">${esc(it.school)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
+    <div class="rp-item-sub">${[it.degree, it.major, it.gpa && `GPA ${it.gpa}`].filter(Boolean).map(esc).join(' · ')}</div>
+    ${it.courses.trim() ? `<div class="rp-item-desc">主修课程：${esc(it.courses)}</div>` : ''}
+    ${it.honors && it.honors.trim() ? `<div class="rp-item-desc">荣誉 / 证书：${esc(it.honors)}</div>` : ''}
+  </div>`;
+  if (id === 'projects') return `<div class="rp-item"><i class="rp-dot"></i>
+    <div class="rp-item-head"><span class="rp-item-title">${esc(it.name)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
+    <div class="rp-item-sub">${[it.role, it.tech].filter(Boolean).map(esc).join(' · ')}</div>
+    ${it.desc.trim() ? `<div class="rp-item-desc">${esc(it.desc)}</div>` : ''}
+  </div>`;
+  return `<div class="rp-item"><i class="rp-dot"></i>
+    <div class="rp-item-head"><span class="rp-item-title">${esc(it.company)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
+    <div class="rp-item-sub">${esc(it.role)}</div>
+    ${it.desc.trim() ? `<div class="rp-item-desc">${esc(it.desc)}</div>` : ''}
+  </div>`;
+}
+
+/* 测量容器包装：单栏包 rp-inner；双栏包 rp-layout（侧栏列宽生效，量出的高度才准） */
+function wrapProbes(area, html) {
+  if (area === 'inner') return `<div class="rp-inner">${html}</div>`;
+  return `<div class="rp-layout">${area === 'side'
+    ? `<aside class="rp-side">${html}</aside><main class="rp-main"></main>`
+    : `<aside class="rp-side"></aside><main class="rp-main">${html}</main>`}</div>`;
+}
+function probeScope(m, area) {
+  if (area === 'inner') return m.firstElementChild;
+  return m.querySelector(area === 'side' ? '.rp-side' : '.rp-main');
+}
+/* 单测一个 HTML 片段的高度（复用隐藏容器，浮点精确） */
+function measureOne(html, m, area) {
+  m.innerHTML = wrapProbes(area, html);
+  const el = probeScope(m, area).firstElementChild;
+  return el ? el.getBoundingClientRect().height : 0;
+}
+
+/* 生成平铺单位序列并测量高度（单位高度含与上下文的间距，装盒后分页位置即所见位置）。
+   单位：header（页头）/ title（区块标题）/ item（条目整块）/ line（文本行，同组渲染时合并回一个 desc） */
+function buildUnits(ids, m, usable, tid, area) {
+  const secGapPx = (data.spacing || SPACING_DEFAULTS).section;
+  const probes = [], units = [];
+  const add = (unit, probeHtml) => { unit.html = probeHtml; units.push(unit); probes.push(probeHtml); };
+  const titleProbe = t => `<div class="rp-sec-title" style="margin-top:${secGapPx}px"><span class="rp-sec-sq"></span>${t}<span class="rp-sec-line"></span></div>`;
+  let gid = 0;
+  // 文本区块（自我评价/核心技能/自定义）按行拆：一行一个单位，绝不截断一行
+  const addTextLines = text => {
+    const g = 'g' + (gid++);
+    const lines = String(text || '').split('\n');
+    lines.forEach((line, i) => {
+      units.push({ kind: 'line', group: g, line, first: i === 0, last: i === lines.length - 1 });
+      probes.push(`<div class="rp-item-desc" style="margin-top:0">${esc(line) || '&nbsp;'}</div>`);
+    });
+  };
+  for (const id of ids) {
+    if (id === 'basic') { if (secVisible('basic')) add({ kind: 'header' }, headerHtml()); continue; }
+    if (!secVisible(id) || sectionEmpty(id)) continue;
+    if (tid === 'data') { // 数据卡片模板：区块是卡片，整卡装盒不拆（超高 fallback 在下面统一处理）
+      add({ kind: 'title', whole: true, secId: id }, sectionHtml(id));
+      continue;
+    }
+    if (isCustomId(id)) {
+      const it = customItem(id);
+      add({ kind: 'title' }, titleProbe(it.title.trim() ? esc(it.title) : '自定义区块'));
+      addTextLines(it.text);
+      continue;
+    }
+    const def = SECTION_DEFS[id], sec = data.sections[id];
+    add({ kind: 'title' }, titleProbe(esc(def.title)));
+    if (def.type === 'text') { addTextLines(sec.text); continue; }
+    for (const it of filled(sec.items, LIST_KEYS[id])) add({ kind: 'item', secId: id, item: it }, itemHtml(id, it));
+  }
+  // 一次渲染全部 probe、一次 reflow 读高（用 getBoundingClientRect 取浮点高：
+  // offsetHeight 是整数，行高 22.275 会被舍成 22，几十行累计少算 ~12px → 页内容会真溢出）
+  m.innerHTML = wrapProbes(area, probes.join(''));
+  const els = probeScope(m, area).children;
+  units.forEach((u, i) => {
+    let h = els[i] ? els[i].getBoundingClientRect().height : 0;
+    if (u.kind === 'title') h += (u.whole ? 0 : secGapPx) + 10;      // margin-top（整卡由 CSS margin 提供）+ margin-bottom
+    else if (u.kind === 'item') h += 12;                             // rp-item margin-bottom
+    else if (u.kind === 'line') { if (u.first) h += 4; if (u.last) h += 12; } // desc margin-top + item margin-bottom
+    u.h = h;
+  });
+  // 超高单位（超一页可用高）退化拆分：整卡 → 标题+条目；超长条目 → 条目头整块 + 描述逐行
+  const out = [];
+  for (const u of units) {
+    if (u.whole && u.h > usable) { // 整卡超高：退回通用平铺（卡片样式让位于不溢出）
+      const def = SECTION_DEFS[u.secId], sec = data.sections[u.secId];
+      out.push({ kind: 'title', html: titleProbe(esc(def.title)), h: secGapPx + 10 + measureOne(titleProbe(esc(def.title)), m, area) });
+      for (const it of filled(sec.items, LIST_KEYS[u.secId])) {
+        const iu = { kind: 'item', secId: u.secId, item: it, html: itemHtml(u.secId, it) };
+        iu.h = measureOne(iu.html, m, area) + 12;
+        if (iu.h - 12 > usable) out.push(...splitOversizeItem(iu, m, area));
+        else out.push(iu);
+      }
+    } else if (u.kind === 'item' && u.h - 12 > usable) {
+      out.push(...splitOversizeItem(u, m, area));
+    } else out.push(u);
+  }
+  return out;
+}
+
+/* 超高条目拆分：条目头（head+sub 整块）+ 描述逐行（行不截断） */
+function splitOversizeItem(u, m, area) {
+  const { secId: id, item: it } = u;
+  let head = '', descText = '';
+  if (id === 'education') {
+    head = `<div class="rp-item"><i class="rp-dot"></i>
+      <div class="rp-item-head"><span class="rp-item-title">${esc(it.school)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
+      <div class="rp-item-sub">${[it.degree, it.major, it.gpa && `GPA ${it.gpa}`].filter(Boolean).map(esc).join(' · ')}</div></div>`;
+    descText = [it.courses.trim() && `主修课程：${it.courses}`, it.honors && it.honors.trim() && `荣誉 / 证书：${it.honors}`].filter(Boolean).join('\n');
+  } else {
+    head = `<div class="rp-item"><i class="rp-dot"></i>
+      <div class="rp-item-head"><span class="rp-item-title">${esc(id === 'projects' ? it.name : it.company)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
+      <div class="rp-item-sub">${id === 'projects' ? [it.role, it.tech].filter(Boolean).map(esc).join(' · ') : esc(it.role)}</div></div>`;
+    descText = it.desc;
+  }
+  const out = [{ kind: 'item', html: head, h: measureOne(head, m, area) }];
+  const g = 'split' + Math.random().toString(36).slice(2, 7);
+  const lines = String(descText || '').split('\n');
+  if (descText.trim()) {
+    m.innerHTML = wrapProbes(area, lines.map(line => `<div class="rp-item-desc" style="margin-top:0">${esc(line) || '&nbsp;'}</div>`).join(''));
+    const els = probeScope(m, area).children;
+    lines.forEach((line, i) => out.push({
+      kind: 'line', group: g, line, first: i === 0, last: i === lines.length - 1,
+      h: (els[i] ? els[i].getBoundingClientRect().height : 22) + (i === 0 ? 4 : 0) + (i === lines.length - 1 ? 12 : 0)
+    }));
+  }
+  return out;
+}
+
+/* 装盒：当前页放不下整块就换页（y>0 防止首个单位就超高时出空页） */
+function packIntoPages(units, usable) {
+  const pages = [[]];
+  let y = 0;
+  for (const u of units) {
+    if (y > 0 && y + u.h > usable) { pages.push([]); y = 0; }
+    pages[pages.length - 1].push(u);
+    y += u.h;
+  }
+  return pages;
+}
+
+/* 把一页的单位渲染成 HTML：同组连续文本行合并回一个 desc（视觉与连续文本完全一致），
+   后续页的页首标题去掉模块间距（第一页保留原间距）；
+   跨页拆开的文本片段：上页片段去掉 margin-bottom、下页片段去掉 margin-top ——
+   保证装盒计算高度与真实渲染高度一致（否则页底多出 12px margin 就会溢出） */
+function renderUnits(units, pageIdx) {
+  const out = [];
+  let buf = null;
+  const flush = () => {
+    if (!buf) return;
+    const itemStyle = buf.lastOfGroup ? '' : 'margin-bottom:0;';   // 组尾不在本页 → 片段底不留 margin
+    const descStyle = buf.firstOfGroup ? '' : 'margin-top:0;';     // 组头不在本页 → 片段顶不留 margin
+    out.push(`<div class="rp-item" style="${itemStyle}"><div class="rp-item-desc" style="${descStyle}">${buf.lines.map(esc).join('\n')}</div></div>`);
+    buf = null;
+  };
+  units.forEach((u, i) => {
+    if (u.kind === 'line') {
+      if (!buf) buf = { lines: [], firstOfGroup: u.first, lastOfGroup: u.last };
+      buf.lines.push(u.line);
+      buf.lastOfGroup = u.last;
+      return;
+    }
+    flush();
+    let html = u.html;
+    if (pageIdx > 0 && i === 0 && u.kind === 'title' && !u.whole)
+      html = html.replace(/margin-top:[\d.]+px/, 'margin-top:0');
+    out.push(html);
+  });
+  flush();
+  return out.join('');
 }
 
 function renderPreview() {
@@ -925,15 +1104,31 @@ function renderPreview() {
   p.style.setProperty('--resume-page-margin', sp.margin + 'px');
   p.style.setProperty('--resume-line-height', sp.line);
 
-  // 渲染顺序完全由 sectionOrder 驱动（用户手动排序优先）
-  const renderOne = id => id === 'basic' ? (secVisible('basic') ? headerHtml() : '') : sectionHtml(id);
-  const SIDE = SIDE_MAP[tid]; // 双栏模板：侧栏区块集合
-  if (SIDE) {
-    const side = data.sectionOrder.filter(id => SIDE.includes(id)).map(renderOne).join('');
-    const main = data.sectionOrder.filter(id => !SIDE.includes(id)).map(renderOne).join('');
-    p.innerHTML = `<div class="rp-layout"><aside class="rp-side">${side}</aside><main class="rp-main">${main}</main></div>`;
-  } else {
-    p.innerHTML = `<div class="rp-inner">${data.sectionOrder.map(renderOne).join('')}</div>`;
+  // 隐藏测量容器：与预览同模板类、同 CSS 变量、同宽 794 —— 量出的高度与真实显示一致
+  const m = document.createElement('div');
+  m.className = p.className;
+  for (const v of ['--resume-theme', '--resume-font', '--resume-sec-gap', '--resume-page-margin', '--resume-line-height'])
+    m.style.setProperty(v, p.style.getPropertyValue(v));
+  m.style.cssText += ';position:absolute;left:-9999px;top:0;visibility:hidden;width:794px;';
+  document.body.appendChild(m);
+  try {
+    const SIDE = SIDE_MAP[tid]; // 双栏模板：侧栏区块集合
+    if (SIDE) {
+      const usable = A4_PAGE_H - (PAGE_PAD[tid] || 72);
+      const sidePages = packIntoPages(buildUnits(data.sectionOrder.filter(id => SIDE.includes(id)), m, usable, tid, 'side'), usable);
+      const mainPages = packIntoPages(buildUnits(data.sectionOrder.filter(id => !SIDE.includes(id)), m, usable, tid, 'main'), usable);
+      const n = Math.max(sidePages.length, mainPages.length);
+      let html = '';
+      for (let i = 0; i < n; i++)
+        html += `<div class="rp-page"><div class="rp-layout"><aside class="rp-side">${renderUnits(sidePages[i] || [], i)}</aside><main class="rp-main">${renderUnits(mainPages[i] || [], i)}</main></div></div>`;
+      p.innerHTML = html;
+    } else {
+      const usable = A4_PAGE_H - PAGE_PAD.inner;
+      const pages = packIntoPages(buildUnits(data.sectionOrder, m, usable, tid, 'inner'), usable);
+      p.innerHTML = pages.map((us, i) => `<div class="rp-page"><div class="rp-inner">${renderUnits(us, i)}</div></div>`).join('');
+    }
+  } finally {
+    m.remove();
   }
   fitPreview();
 }
@@ -960,11 +1155,42 @@ function fileBase() {
   return raw.replace(/[\\/:*?"<>|]/g, '');
 }
 
-/* ---------- 导出：PDF（打印） ---------- */
-function exportPDF() {
+/* ---------- 导出：PDF（jsPDF 直接下载，不走打印对话框） ----------
+   预览已是多页 A4 DOM（.rp-page × N）：逐页渲染成图、逐页写入 PDF，
+   PDF 分页位置与编辑预览的分隔虚线位置完全一致；手动 Ctrl+P 打印仍走 print-mode 兜底 */
+async function exportPDF() {
   if (isResumeEmpty()) { toast('简历内容还是空的，先填写一些内容再导出吧', 'warn'); return; }
-  toast('在打印对话框中选择「另存为 PDF」即可');
-  setTimeout(() => window.print(), 300);
+  if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
+    toast('PDF 组件未加载（assets/jspdf.umd.min.js 缺失）', 'warn'); return;
+  }
+  const needShow = !document.body.classList.contains('show-preview')
+    && getComputedStyle($('col-preview')).display === 'none';
+  if (needShow) document.body.classList.add('show-preview');
+  const p = preview();
+  const oldTransform = p.style.transform;
+  p.style.transform = 'none';
+  showLoading('正在生成 PDF…');
+  await new Promise(r => setTimeout(r, 60));
+  try {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pages = p.querySelectorAll('.rp-page');
+    for (let i = 0; i < pages.length; i++) {
+      const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+      if (i > 0) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); // 整页铺满 A4
+    }
+    pdf.save(fileBase() + '.pdf'); // 姓名-求职意向-简历.pdf，直接下载
+    toast(`已导出 PDF（共 ${pages.length} 页，分页与预览一致）`);
+  } catch (e) {
+    console.error(e);
+    toast('导出 PDF 失败，请重试', 'warn');
+  } finally {
+    hideLoading();
+    p.style.transform = oldTransform;
+    if (needShow) document.body.classList.remove('show-preview');
+    fitPreview();
+  }
 }
 function enterPrintMode() {
   const p = preview();
