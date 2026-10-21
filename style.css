@@ -85,7 +85,7 @@ button { font-family: inherit; cursor: pointer; }
 .dropdown {
   position: absolute; right: 0; top: calc(100% + 6px); min-width: 168px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  box-shadow: var(--shadow-lg); padding: 6px; z-index: 100;
+  box-shadow: var(--shadow-lg); padding: 6px; z-index: 250; /* 浮层：高于 modal(200)，JS 用 fixed 按按钮位置放置 */
 }
 .dropdown-item {
   display: flex; align-items: center; gap: 8px; width: 100%;
@@ -265,7 +265,32 @@ html[data-skin="candy"] .stickers { opacity: .85; }
   padding: 14px 18px; border-bottom: 1px solid var(--border);
 }
 .modal-actions { display: flex; gap: 8px; }
-.export-preview-box { overflow: auto; padding: 20px; display: flex; justify-content: center; }
+/* 预览滚动区：flex:1 + min-height:0 让它在 92vh 弹窗内收缩滚动（内容再长也不把弹窗撑出屏幕、
+   底部操作条始终可见）；block 布局 + wrap 精确包裹缩放后的白卡片（JS 设置 wrap 宽高） */
+.export-preview-box { overflow: auto; padding: 20px; flex: 1; min-height: 0; }
+.export-preview-box .export-wrap { margin: 0 auto; overflow: hidden; }
+
+/* 预览弹窗底部操作条（电脑端 + 手机端都显示）：导出 / AI 诊断 / 关闭预览 —— 吸附弹窗内底部，始终可见 */
+.preview-modal-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; border-top: 1px solid var(--border); background: var(--panel);
+  flex-shrink: 0;
+}
+
+/* 导航「按钮 + 弹出列表」选择器（模板 / 字体 / 主题 / 标题对齐） */
+.dropdown-label { font-size: 12px; color: var(--text-2); padding: 2px 4px 8px; }
+.dropdown-swatches { min-width: 208px; }
+.dropdown-swatches .palette { margin-bottom: 2px; }
+/* 编辑表单标签栏末尾的「+」添加自定义模块按钮（仅手机端显示，电脑端由模块管理面板提供） */
+.section-nav .nav-add { display: none; }
+
+/* 间距设置弹窗 */
+.spacing-row { margin-bottom: 18px; }
+.spacing-row:last-child { margin-bottom: 4px; }
+.spacing-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; margin-bottom: 6px; }
+.spacing-head b { color: var(--primary); font-size: 13px; }
+.spacing-ctl { display: flex; align-items: center; gap: 10px; }
+.spacing-ctl input[type="range"] { flex: 1; }
 
 /* 表单控件 */
 .field { margin-bottom: 12px; }
@@ -340,24 +365,27 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 /* ---------- 5. 编辑器（三栏布局） ---------- */
 #view-editor { display: flex; flex-direction: column; height: 100vh; }
 .editor-header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 0 12px; }
-/* 工具栏内容与编辑区同宽（1200px）居中对齐；整体做紧凑 */
+/* 电脑端：导航按钮组 + 编辑表单标签栏拼在一行（标签栏填满中间，不留大空白），限宽 1200px 居中 */
 .editor-header-inner {
   max-width: 1200px; width: 100%; margin: 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 6px 0; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; flex-wrap: nowrap;
 }
 .editor-header .btn { padding: 4px 10px; font-size: 12px; }
-.editor-header .tpl-select-label select { padding: 4px 6px; font-size: 12px; }
-/* 返回模板页：醒目主题色描边，和其它按钮明确区分 */
+/* 返回主页：醒目主题色描边，和其它按钮明确区分；两个字一行显示不换行 */
 .btn-back {
   background: var(--primary); border-color: var(--primary); color: var(--on-primary);
-  font-weight: 600;
+  font-weight: 600; white-space: nowrap;
 }
 .btn-back:hover { background: var(--primary-hover); color: var(--on-primary); }
-.header-left, .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.tpl-select-label { font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
-.tpl-select-label select { width: auto; padding: 6px 8px; }
-.save-status { font-size: 12px; color: var(--text-2); }
+.header-left, .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.header-right { margin-left: auto; }
+/* 导航「按钮 + 弹出列表」选择器：文字超长省略，防止撑破导航 */
+.picker-btn { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.btn-ic { padding: 4px 9px; font-size: 14px; line-height: 1.2; } /* 撤销 / 重做小按钮 */
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:disabled:hover { border-color: var(--border); color: var(--text-2); }
+.save-status { font-size: 12px; color: var(--text-2); white-space: nowrap; }
 
 /* 编辑区限宽 1200px 居中：flex 布局 + order 属性支持三栏拖拽换位（宽度跟随面板而非位置） */
 .editor-body {
@@ -370,20 +398,25 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 .col-preview { flex: 1 1 auto; min-width: 0; }
 .col-title { font-size: 13px; color: var(--text-2); margin-bottom: 10px; }
 
-/* 左栏：区块导航（吸顶固定：滚动表单时标签不动，点击直达对应表单） */
-.section-nav {
-  position: sticky; top: -16px; z-index: 40;
+/* 编辑表单标签栏（两处容器，按端显示）：
+   手机端 = 导航栏内 #section-nav（吸顶第三行，可横滑）；电脑端 = 编辑表单面板内 .section-nav-side（吸顶 wrap 全显示） */
+#section-nav { display: none; } /* 电脑端导航栏上不放标签栏（第 8 轮：移回编辑表单面板） */
+.section-nav-side {
+  position: sticky; top: -16px; z-index: 40; /* 面板内吸顶：滚动表单时标签不动 */
   display: flex; flex-wrap: wrap; gap: 6px;
   margin: -16px -16px 12px; padding: 12px 16px 10px;
   background: var(--panel); border-bottom: 1px solid var(--border);
 }
 .section-nav button {
   border: 1px solid var(--border); background: var(--panel); color: var(--text-2);
-  border-radius: 999px; padding: 5px 12px; font-size: 12px;
+  border-radius: 999px; padding: 4px 11px; font-size: 12px;
+  flex-shrink: 0; white-space: nowrap;
 }
 .section-nav button.active {
   background: var(--primary); border-color: var(--primary); color: var(--on-primary);
 }
+/* 电脑端连续表单：模块表单块之间的分隔（手机端单模块渲染，不会命中） */
+.form-block + .form-block { margin-top: 26px; padding-top: 20px; border-top: 1px dashed var(--border); }
 .form-title { font-size: 14px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 
 /* 条目卡片（教育/项目/工作经历的每一条） */
@@ -485,7 +518,9 @@ html[data-skin="candy"] .stickers { opacity: .85; }
   background: #fff; color: #2B2B2B;
   box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
   transform-origin: top center; /* JS 按容器宽度设置 scale */
-  font-size: 13.5px; line-height: 1.65;
+  font-size: 13.5px;
+  /* 行间距：由「间距设置」通过 --resume-line-height 注入，默认 1.65 */
+  line-height: var(--resume-line-height, 1.65);
   /* 简历字体：由「字体」下拉通过 --resume-font 注入，默认系统字体栈 */
   font-family: var(--resume-font, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif);
   --resume-theme: #1F4E8C;   /* 简历主题色（第二轮可做切换，默认商务蓝） */
@@ -494,11 +529,13 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 .resume-preview.fs-large { font-size: 14.5px; }
 .resume-preview .ph { color: #B9BFC9; } /* 预览占位提示文字 */
 
-.rp-inner { padding: 42px 46px; }
+/* 页面左右边距：由「间距设置」通过 --resume-page-margin 注入，默认 46px */
+.rp-inner { padding: 42px var(--resume-page-margin, 46px); }
 .rp-name { font-size: 2em; font-weight: 700; letter-spacing: 2px; }
 .rp-position { font-size: 1.05em; color: var(--resume-theme); margin-top: 2px; }
 .rp-contacts { display: flex; flex-wrap: wrap; gap: 4px 16px; color: #5A6270; font-size: .92em; margin-top: 8px; }
-.rp-section { margin-top: 20px; }
+/* 模块上下间距：由「间距设置」通过 --resume-sec-gap 注入，默认 20px */
+.rp-section { margin-top: var(--resume-sec-gap, 20px); }
 .rp-sec-title {
   font-size: 1.08em; font-weight: 700; letter-spacing: 1px;
   padding-bottom: 5px; margin-bottom: 10px;
@@ -525,6 +562,8 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 .ta-left .rp-sec-title { text-align: left; }
 .ta-center .rp-sec-title { text-align: center; }
 .ta-center .rp-sec-line { margin-left: auto; margin-right: auto; }
+.ta-right .rp-sec-title { text-align: right; }
+.ta-right .rp-sec-line { margin-left: auto; margin-right: 0; } /* 装饰线随标题一起靠右 */
 
 /* ---- 头像（base64 img，真实元素，PDF/PNG 导出均正常） ---- */
 .rp-header.with-avatar { display: flex; align-items: flex-start; gap: 16px; }
@@ -549,10 +588,11 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 /* 模板一：简洁（细分割线；大标题与装饰线随标题主题色） */
 .tpl-simple .rp-sec-title { border-bottom: none; }
 
-/* 模板二：商务（深蓝头部色带；标题下用克制的短装饰线，不要长横线） */
+/* 模板二：商务（深蓝头部色带；标题下用克制的短装饰线，不要长横线；色带随页面边距伸缩） */
 .tpl-business .rp-header {
   background: var(--resume-theme); color: #fff;
-  margin: -42px -46px 0; padding: 30px 46px 22px;
+  margin: -42px calc(-1 * var(--resume-page-margin, 46px)) 0;
+  padding: 30px var(--resume-page-margin, 46px) 22px;
 }
 .tpl-business .rp-position { color: rgba(255, 255, 255, .92); }
 .tpl-business .rp-contacts { color: rgba(255, 255, 255, .85); }
@@ -645,37 +685,51 @@ html[data-skin="candy"] .stickers { opacity: .85; }
 @media (max-width: 1100px) {
   .editor-body { flex-direction: column; overflow-y: auto; }
   .col { overflow: visible; flex: none; }
-  /* 手机端固定布局：吸顶导航栏 → 表单标签（吸顶）→ 表单内容 → 模块管理 → 预览 */
+  /* 手机端固定布局：吸顶导航（第一行：模板页/模板/字体/主题；第二行：标题对齐/间距设置/撤销重做/导出；第三行：标签栏）→ 表单 → 模块管理 */
   .editor-header { position: sticky; top: 0; z-index: 50; }
-  .editor-header-inner { flex-wrap: nowrap; overflow-x: auto; padding: 6px 0; }
+  .editor-header-inner { flex-wrap: wrap; overflow-x: visible; padding: 6px 0; row-gap: 6px; }
+  .header-left { order: 1; flex: 0 0 100%; flex-wrap: nowrap; overflow-x: auto; }
+  .header-right { order: 2; flex: 0 0 100%; flex-wrap: nowrap; overflow-x: auto; margin-left: 0; justify-content: flex-start; }
+  /* 手机端：标签栏在导航栏第三行（吸顶随 header），可左右滑动 */
+  #section-nav {
+    display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none;
+    order: 3; flex: 0 0 100%; justify-content: flex-start; padding-bottom: 2px;
+  }
+  #section-nav::-webkit-scrollbar { display: none; }
+  .section-nav-side { display: none; } /* 手机端：面板内标签栏隐藏（标签栏在导航栏上） */
+  .section-nav .nav-add { display: inline-block; border-style: dashed; } /* 标签栏末尾「+」添加自定义模块 */
+  .picker-btn { max-width: 38vw; } /* 长模板名/字体名省略，防止撑破导航行 */
   .save-status { display: none; }
   .col-dragbar { display: none; } /* 手机端不拖拽换位 */
-  .col-nav { display: contents; } /* 标签与表单脱离栏容器，直接参与纵向排序 */
-  .section-nav {
-    order: 1; position: sticky; top: 41px; z-index: 40;
-    margin: 0; padding: 8px 12px; flex-wrap: nowrap; overflow-x: auto;
-  }
-  .section-nav button { flex-shrink: 0; }
+  .col-nav { display: contents; } /* 表单脱离栏容器，直接参与纵向排序 */
   .section-form {
     order: 2; background: var(--panel); padding: 16px;
     max-width: 640px; width: 100%; margin: 0 auto;
+    scroll-margin-top: calc(var(--mnav-h, 120px) + 8px); /* 点标签滚动时避开吸顶导航（--mnav-h 由 JS 实测写入） */
   }
   .col-manage { order: 3; max-width: 640px; width: 100%; margin: 0 auto; border-bottom: 1px solid var(--border); }
-  /* 手机版模块管理精简：只读名称列表（隐藏眼睛/上下移/删除），桌面端不变 */
+  /* 手机版模块管理精简：标题对齐/主题色板收进导航按钮；AI 诊断/JSON 备份收进预览弹窗；
+     模块列表整排删除 → 手机端页面最底部只剩「清空全部内容」（电脑端全部保留） */
   .block-item .btn-mini { display: none; }
+  .col-manage .layout-row, .col-manage > .palette-label, .col-manage #palette,
+  .col-manage #block-list, .col-manage .manage-tools, .col-manage .add-item-btn { display: none; }
   .col-preview { order: 4; display: none; }
   body.show-preview .col-preview {
     display: flex; position: fixed; inset: 0; z-index: 140;
     background: var(--bg); padding-top: 16px; overflow: auto;
   }
-  /* 手机端下拉（主题 / 导出）固定靠右弹出，不遮挡左侧内容 */
-  .dropdown { position: fixed; top: 46px; right: 12px; left: auto; max-height: 70vh; overflow: auto; }
+  /* 预览弹窗：手机端全屏（上面效果图、下面操作条），内容在白色卡片内滚动、不溢出到黑色背景 */
+  #export-modal .modal-panel { width: 100%; max-width: none; height: 100%; max-height: none; border-radius: 0; }
+  #export-modal .modal-header { padding: 10px 14px; }
+  #export-modal .export-preview-box { padding: 12px; }
   .btn-fab { display: block; }
   #view-editor { height: auto; min-height: 100vh; }
 }
 @media (max-width: 560px) {
   .home-header { flex-direction: column; gap: 12px; }
   .editor-header { position: sticky; top: 0; z-index: 50; }
+  /* 基本信息区窄屏优化：并排字段（性别/年龄、邮箱/所在地）改单列，不再挤在一起 */
+  .section-form .field-row { grid-template-columns: 1fr; }
 }
 
 /* ---------- 8. 打印样式（导出 PDF 关键） ---------- */

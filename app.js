@@ -93,6 +93,14 @@ const FONTS = {
   kai:    { name: '楷体',     stack: 'KaiTi, "Kaiti SC", STKaiti, serif' }
 };
 
+/* 间距设置默认值（间距弹窗里的「重置」即恢复到此值；渲染时注入 --resume-* CSS 变量） */
+const SPACING_DEFAULTS = { section: 20, margin: 46, line: 1.65 }; // 模块上下间距px / 页面左右边距px / 行高倍数
+const SPACING_FMT = {
+  section: v => v + 'px',
+  margin:  v => v + 'px',
+  line:    v => (+v).toFixed(2).replace(/0$/, '')
+};
+
 /* 内联 SVG 图标（替代 emoji，风格统一） */
 const ICONS = {
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
@@ -159,7 +167,7 @@ const SECTION_DEFS = {
     ],
     newItem: () => ({ company: '', role: '', start: '', end: '', desc: '' })
   },
-  coreSkills: { title: '核心技能', type: 'coreSkills', newGroup: () => ({ name: '', tags: [] }) },
+  coreSkills: { title: '核心技能', type: 'text' }, // 第 7 轮：取消分组，改为纯文本大方框（同自我评价，带 AI 美化）
   summary: { title: '自我评价', type: 'text' },
   /* 自定义模块：每条是一个独立模块（id 稳定，可单独排序/显隐/移除） */
   custom: { title: '自定义区块', type: 'custom' }
@@ -180,6 +188,7 @@ function defaultData() {
     fontScale: 'standard',
     font: 'system',                     // 简历字体
     layout: { align: 'left', titleAlign: 'left', contactMode: 'label' }, // 页头对齐 / 标题对齐 / 联系方式标签模式
+    spacing: { ...SPACING_DEFAULTS },       // 间距设置：模块上下间距 / 页面左右边距 / 行间距
     sectionOrder: ['basic', 'education', 'projects', 'work', 'coreSkills', 'summary', 'custom:c1'],
     colOrder: ['nav', 'manage', 'preview'], // 编辑器三栏排列（拖拽换位后持久化）
     sections: {
@@ -187,7 +196,7 @@ function defaultData() {
       education: { visible: true, items: [SECTION_DEFS.education.newItem()] },
       projects: { visible: true, items: [SECTION_DEFS.projects.newItem()] },
       work: { visible: true, items: [SECTION_DEFS.work.newItem()] },
-      coreSkills: { visible: true, groups: [{ name: '核心技能', tags: [] }] }, // 简洁标签，无进度条
+      coreSkills: { visible: true, text: '' }, // 纯文本大方框（可直接粘贴整段技能描述）
       summary: { visible: true, text: '' },
       custom: { items: [{ id: 'c1', title: '', text: '', visible: true }] } // 自定义模块集合
     }
@@ -287,8 +296,26 @@ function normalizeData(saved) {
     if (si >= 0) d.sectionOrder.splice(si, 0, 'coreSkills');
     else d.sectionOrder.push('coreSkills');
   }
-  if (!d.sections.coreSkills || !Array.isArray(d.sections.coreSkills.groups))
-    d.sections.coreSkills = { visible: true, groups: [{ name: '核心技能', tags: [] }] };
+  // 第 7 轮：核心技能取消分组 → 纯文本；旧「分组 + 标签」数据迁移为「分组名：标签1、标签2」一行一组
+  if (!d.sections.coreSkills || typeof d.sections.coreSkills !== 'object')
+    d.sections.coreSkills = { visible: true, text: '' };
+  if (typeof d.sections.coreSkills.text !== 'string') {
+    const gs = Array.isArray(d.sections.coreSkills.groups) ? d.sections.coreSkills.groups : [];
+    const vis = d.sections.coreSkills.visible !== false;
+    d.sections.coreSkills = {
+      visible: vis,
+      text: gs.map(g => {
+        const name = String((g && g.name) || '').trim(), tags = ((g && g.tags) || []).join('、');
+        return name && tags ? `${name}：${tags}` : (name || tags);
+      }).filter(x => x.trim()).join('\n')
+    };
+  }
+  // 间距设置兜底：缺失补默认、超范围收拢
+  if (!d.spacing || typeof d.spacing !== 'object') d.spacing = { ...SPACING_DEFAULTS };
+  const clampN = (v, min, max, def) => (isFinite(+v) ? Math.min(max, Math.max(min, +v)) : def);
+  d.spacing.section = clampN(d.spacing.section, 10, 40, SPACING_DEFAULTS.section);
+  d.spacing.margin  = clampN(d.spacing.margin, 24, 70, SPACING_DEFAULTS.margin);
+  d.spacing.line    = clampN(d.spacing.line, 1.3, 2, SPACING_DEFAULTS.line);
   if (!Array.isArray(d.colOrder) || d.colOrder.length !== 3 || !['nav', 'manage', 'preview'].every(x => d.colOrder.includes(x)))
     d.colOrder = ['nav', 'manage', 'preview'];
   if (!TEMPLATES[d.templateId]) d.templateId = 'simple';
@@ -298,15 +325,57 @@ function normalizeData(saved) {
   if (!FONTS[d.font]) d.font = 'system';
   if (!d.layout || typeof d.layout !== 'object') d.layout = { align: 'left', titleAlign: 'left', contactMode: 'label' };
   if (!['left', 'center', 'right'].includes(d.layout.align)) d.layout.align = 'left';
-  if (!['left', 'center'].includes(d.layout.titleAlign)) d.layout.titleAlign = 'left';
+  if (!['left', 'center', 'right'].includes(d.layout.titleAlign)) d.layout.titleAlign = 'left';
   if (!['label', 'compact'].includes(d.layout.contactMode)) d.layout.contactMode = 'label';
   return d;
 }
+/* ---------- 撤销 / 重做（快照栈：每次保存把「保存前的状态」入栈，上限 50 步） ---------- */
+let undoStack = [], redoStack = [];
+let lastSaved = null;        // 上次保存时的快照（撤销栈的基准）
+let suppressUndo = false;    // 撤销/重做回放时不入栈
+const UNDO_LIMIT = 50;
+
 function saveData() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  const cur = JSON.stringify(data);
+  if (!suppressUndo && lastSaved !== null && lastSaved !== cur) {
+    undoStack.push(lastSaved);
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack = []; // 新变更清空重做栈
+  }
+  lastSaved = cur;
+  localStorage.setItem(STORAGE_KEY, cur);
   const t = new Date();
   $('save-status').textContent = '已自动保存 ' +
     [t.getHours(), t.getMinutes(), t.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
+  updateUndoButtons();
+}
+function updateUndoButtons() {
+  const u = document.querySelector('[data-action="undo"]'), r = document.querySelector('[data-action="redo"]');
+  if (u) u.disabled = !undoStack.length;
+  if (r) r.disabled = !redoStack.length;
+}
+/* 回放到指定快照：恢复数据 + 全量刷新界面（皮肤也随快照恢复） */
+function applySnapshot(snap) {
+  suppressUndo = true;
+  data = normalizeData(JSON.parse(snap));
+  saveData(); // suppressUndo=true，本次不入撤销栈
+  suppressUndo = false;
+  if (!data.sectionOrder.includes(currentSection)) currentSection = 'basic';
+  applySkin(data.skin, { silent: true });
+  refreshAll();
+}
+function undo() {
+  if (!undoStack.length) { toast('没有可撤销的操作', 'warn'); return; }
+  redoStack.push(JSON.stringify(data));
+  applySnapshot(undoStack.pop());
+  toast('已撤销');
+}
+function redo() {
+  if (!redoStack.length) { toast('没有可重做的操作', 'warn'); return; }
+  undoStack.push(JSON.stringify(data));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  applySnapshot(redoStack.pop());
+  toast('已重做');
 }
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveData, 300); }
 
@@ -354,6 +423,7 @@ function showView(name) {
   window.scrollTo(0, 0);
   if (name === 'editor') {
     renderSectionNav(); renderForm(); renderModulePanel(); renderPalette(); renderPreview(); applyColOrder();
+    renderMobilePickers(); syncStickyTop(); // 手机端导航按钮列表 + 实测导航高度
   } else {
     renderTemplateCards();
   }
@@ -445,42 +515,95 @@ function switchTemplate(id, goEditor) {
   toast(`已切换到「${TEMPLATES[id].name}」模板，已填内容全部保留`);
 }
 function syncTemplateSelect() {
-  $('template-select').innerHTML = Object.entries(TEMPLATES)
-    .map(([id, t]) => `<option value="${id}" ${id === data.templateId ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+  const b = $('btn-tpl-picker'); // 模板按钮（电脑端 + 手机端共用）：始终显示「模板：当前选中」
+  if (b) b.textContent = '模板：' + TEMPLATES[data.templateId].name + ' ▾';
 }
 function syncFontSelect() {
-  $('font-select').innerHTML = Object.entries(FONTS)
-    .map(([id, f]) => `<option value="${id}" ${id === data.font ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
+  const b = $('btn-font-picker'); // 字体按钮：始终显示「字体：当前选中」
+  if (b) b.textContent = '字体：' + FONTS[data.font].name + ' ▾';
 }
 /* 同步所有「对齐」下拉（中栏标题对齐 + 基本信息页头对齐） */
 function syncLayoutControls() {
   document.querySelectorAll('select[data-layout]').forEach(sel => { sel.value = data.layout[sel.dataset.layout]; });
+  const b = $('btn-align-picker'); // 标题对齐按钮：始终显示「标题对齐：当前选中」
+  if (b) b.textContent = '标题对齐：' + ({ left: '靠左', center: '居中', right: '靠右' })[data.layout.titleAlign] + ' ▾';
+}
+
+/* ---------- 导航按钮式选择器（模板 / 字体 / 主题 / 标题对齐，电脑端 + 手机端共用） ---------- */
+function renderMobilePickers() {
+  const tl = $('tpl-picker-list');
+  if (tl) tl.innerHTML = Object.entries(TEMPLATES).map(([id, t]) =>
+    `<button class="dropdown-item ${id === data.templateId ? 'active' : ''}" data-action="pick-template" data-id="${id}">${esc(t.name)}</button>`).join('');
+  const fl = $('font-picker-list');
+  if (fl) fl.innerHTML = Object.entries(FONTS).map(([id, f]) =>
+    `<button class="dropdown-item ${id === data.font ? 'active' : ''}" data-action="pick-font" data-id="${id}">${esc(f.name)}</button>`).join('');
+  const al = $('align-picker-list');
+  if (al) al.innerHTML = [['left', '靠左'], ['center', '居中'], ['right', '靠右']].map(([v, t]) =>
+    `<button class="dropdown-item ${data.layout.titleAlign === v ? 'active' : ''}" data-action="pick-align" data-id="${v}">${t}</button>`).join('');
+}
+/* 下拉浮层定位：用 fixed 按按钮位置放置，浮在导航栏外面（不被 header 的横向滚动区裁剪）；
+   带 .dropdown-up 的（预览弹窗底部导出）向上展开；
+   同步放一次 + 下一帧复核一次（点击引发的焦点滚动/布局提交可能让首帧坐标偏几像素） */
+function placeDropdown(btn, dd) {
+  const put = () => {
+    if (dd.classList.contains('hidden')) return; // 等待期间已被关闭就不再动
+    const r = btn.getBoundingClientRect();
+    dd.style.position = 'fixed';
+    dd.style.left = 'auto'; dd.style.right = 'auto'; dd.style.bottom = 'auto';
+    const w = dd.offsetWidth, h = dd.offsetHeight;
+    let left = r.left;
+    if (left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - w); // 防超出右屏
+    dd.style.left = left + 'px';
+    dd.style.top = dd.classList.contains('dropdown-up')
+      ? Math.max(8, r.top - h - 6) + 'px'
+      : (r.bottom + 6) + 'px';
+  };
+  put();
+  requestAnimationFrame(put);
+}
+/* 手机端吸顶导航为多行、高度随内容变化：实测后写入 CSS 变量，点标签滚动时避开吸顶区 */
+function syncStickyTop() {
+  const hdr = document.querySelector('.editor-header');
+  if (!hdr) return;
+  if (window.innerWidth <= 1100)
+    document.documentElement.style.setProperty('--mnav-h', hdr.offsetHeight + 'px');
+  else
+    document.documentElement.style.removeProperty('--mnav-h');
 }
 
 /* ---------- 编辑器：左栏区块导航 + 表单 ---------- */
 function renderSectionNav() {
-  $('section-nav').innerHTML = data.sectionOrder.map(id =>
+  const html = data.sectionOrder.map(id =>
     `<button data-action="nav-pick" data-id="${esc(id)}" class="${id === currentSection ? 'active' : ''}">${esc(moduleName(id))}</button>`
   ).join('');
+  const navMain = $('section-nav'); // 手机端：导航栏上的标签栏（末尾带「+」添加自定义模块）
+  if (navMain) navMain.innerHTML = html +
+    `<button class="nav-add" data-action="mod-add-custom" title="添加自定义模块">+</button>`;
+  const navSide = $('section-nav-side'); // 电脑端：编辑表单面板内的标签栏（点击滚动定位，不带「+」）
+  if (navSide) navSide.innerHTML = html;
 }
 
-function renderForm() {
-  // 自定义模块单页表单（标题 + 内容 + 永久删除）
-  if (isCustomId(currentSection)) {
-    const it = customItem(currentSection);
-    if (!it) { currentSection = 'basic'; return renderForm(); }
-    $('section-form').innerHTML = `
-      <h3 class="form-title">${esc(moduleName(currentSection))}</h3>
+/* ---------- 编辑表单：电脑端 = 面板内全模块连续表单（上下滑动一直填）；手机端 = 标签切换单模块 ---------- */
+let formMode = null; // 'all'（电脑端连续）| 'single'（手机端单模块）
+const currentFormMode = () => (window.innerWidth > 1100 ? 'all' : 'single');
+
+/* 生成单个模块的表单块 HTML（两种模式共用；条目操作按钮带 data-s 定位所属模块） */
+function formBlockHtml(id) {
+  // 自定义模块表单（标题 + 内容 + 永久删除）
+  if (isCustomId(id)) {
+    const it = customItem(id);
+    if (!it) return '';
+    return `<div class="form-block" id="form-sec-${esc(id)}">
+      <h3 class="form-title">${esc(moduleName(id))}</h3>
       <div class="field"><label>区块标题</label>
         <input data-c="title" data-cid="${it.id}" value="${esc(it.title)}" placeholder="如：获奖经历 / 证书 / 游戏经验"></div>
       <div class="field"><label>区块内容（支持换行）<button type="button" class="ai-btn" data-action="ai-polish" data-c="text" data-cid="${it.id}">${ICONS.spark}AI 美化</button></label>
         <textarea data-c="text" data-cid="${it.id}" rows="6" placeholder="填写该区块的具体内容">${esc(it.text)}</textarea></div>
-      <button class="btn btn-danger-text" data-action="custom-del" data-id="${esc(currentSection)}">删除此自定义模块</button>`;
-    return;
+      <button class="btn btn-danger-text" data-action="custom-del" data-id="${esc(id)}">删除此自定义模块</button></div>`;
   }
 
-  const def = SECTION_DEFS[currentSection];
-  const sec = data.sections[currentSection];
+  const def = SECTION_DEFS[id];
+  const sec = data.sections[id];
   let html = `<h3 class="form-title">${esc(def.title)}</h3>`;
 
   if (def.type === 'basic') {
@@ -496,7 +619,7 @@ function renderForm() {
     if (localStorage.getItem('avatar_tip_closed') !== '1') {
       html += `<div class="avatar-tip"><span>建议：正面、清晰、浅色背景的正式照片；避免自拍、生活照、动漫头像。</span><button class="btn btn-mini" data-action="avatar-tip-close" title="不再提示">×</button></div>`;
     }
-    // 字段顺序：页头对齐 → 姓名 → 求职意向 → 性别/年龄 → 更多选填 → 电话 → 联系方式显示 → 邮箱/所在地/主页
+    // 字段顺序：页头对齐 → 姓名 → 求职意向 → 性别/年龄 → 更多选填 → 电话 → 邮箱/所在地 → 个人主页 → 显示方式（放最后）
     const F = (key, label, ph) => `<div class="field"><label>${label}</label>
       <input data-s="basic" data-f="${key}" value="${esc(sec[key])}" placeholder="${esc(ph)}"></div>`;
     const aligns = { left: '靠左', center: '居中', right: '靠右' };
@@ -520,47 +643,59 @@ function renderForm() {
         </select></div>`).join('') +
       `</details>`;
     html += F('phone', '电话', '如：138xxxx8888');
-    // 联系方式显示紧跟电话，上下相邻、布局连贯
-    html += `<div class="field"><label>联系方式显示</label>
+    html += `<div class="field-row">${F('email', '邮箱', '如：hi@example.com')}${F('city', '所在地', '如：广州')}</div>`;
+    html += F('website', '个人主页 / 作品链接', '如：github.com/你的名字');
+    // 「显示方式」控制整个基本信息区（电话/邮箱 + 民族/政治面貌/户籍等）是否带标签前缀，
+    // 放在基本信息区最后，不再夹在电话与邮箱之间、不突兀
+    html += `<div class="field"><label>显示方式</label>
       <select data-layout="contactMode">
         <option value="label" ${data.layout.contactMode !== 'compact' ? 'selected' : ''}>标签模式（电话：138…）</option>
         <option value="compact" ${data.layout.contactMode === 'compact' ? 'selected' : ''}>紧凑模式（无标签前缀）</option>
       </select></div>`;
-    html += `<div class="field-row">${F('email', '邮箱', '如：hi@example.com')}${F('city', '所在地', '如：广州')}</div>`;
-    html += F('website', '个人主页 / 作品链接', '如：github.com/你的名字');
-  } else if (def.type === 'coreSkills') {
-    // 核心技能：分组 + 简洁标签编辑（回车添加关键词）
-    html += sec.groups.map((g, gi) => `
-      <div class="item-card">
-        <div class="item-toolbar">
-          <span class="item-no">分组 ${gi + 1}</span>
-          <button class="btn btn-mini" data-action="cskill-group-del" data-g="${gi}" ${sec.groups.length <= 1 ? 'disabled' : ''}>删除分组</button>
-        </div>
-        <div class="field"><label>分组名（如：核心技能 / 相关技能）</label>
-          <input data-s="coreSkills" data-g="${gi}" data-f="gname" value="${esc(g.name)}" placeholder="如：核心技能"></div>
-        <div class="tag-editor">
-          ${g.tags.map((t, ti) => `<span class="tag-chip">${esc(t)}<button type="button" data-action="tag-del" data-g="${gi}" data-t="${ti}" title="删除">×</button></span>`).join('')}
-          <input class="tag-input" data-g="${gi}" placeholder="输入关键词，回车添加">
-        </div>
-      </div>`).join('');
-    html += `<button class="btn add-item-btn" data-action="cskill-group-add">+ 添加分组</button>`;
   } else if (def.type === 'list') {
     html += sec.items.map((item, i) => `
       <div class="item-card">
         <div class="item-toolbar">
           <span class="item-no">第 ${i + 1} 条</span>
-          <button class="btn btn-mini" data-action="item-up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
-          <button class="btn btn-mini" data-action="item-down" data-i="${i}" ${i === sec.items.length - 1 ? 'disabled' : ''}>↓</button>
-          <button class="btn btn-mini" data-action="item-del" data-i="${i}">删除</button>
+          <button class="btn btn-mini" data-action="item-up" data-s="${id}" data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn btn-mini" data-action="item-down" data-s="${id}" data-i="${i}" ${i === sec.items.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="btn btn-mini" data-action="item-del" data-s="${id}" data-i="${i}">删除</button>
         </div>
-        ${fieldsHtml(def.fields, item, currentSection, i)}
+        ${fieldsHtml(def.fields, item, id, i)}
       </div>`).join('');
-    html += `<button class="btn add-item-btn" data-action="item-add">+ 添加一条${esc(def.title)}</button>`;
+    html += `<button class="btn add-item-btn" data-action="item-add" data-s="${id}">+ 添加一条${esc(def.title)}</button>`;
   } else if (def.type === 'text') {
-    html += `<div class="field"><label>${esc(def.title)}（支持换行）<button type="button" class="ai-btn" data-action="ai-polish" data-s="${currentSection}" data-f="text">${ICONS.spark}AI 美化</button></label>
-      <textarea data-s="${currentSection}" data-f="text" rows="6" placeholder="用 2~4 句话介绍自己的优势与特点">${esc(sec.text)}</textarea></div>`;
+    // 纯文本大方框（自我评价 / 核心技能）：可直接粘贴整段内容，带 AI 美化
+    const ph = id === 'coreSkills'
+      ? '如：熟练掌握 Java / Python；熟悉 MySQL、Redis；了解 Spring Boot（可直接粘贴整段内容）'
+      : '用 2~4 句话介绍自己的优势与特点';
+    html += `<div class="field"><label>${esc(def.title)}（支持换行）<button type="button" class="ai-btn" data-action="ai-polish" data-s="${id}" data-f="text">${ICONS.spark}AI 美化</button></label>
+      <textarea data-s="${id}" data-f="text" rows="6" placeholder="${ph}">${esc(sec.text)}</textarea></div>`;
   }
-  $('section-form').innerHTML = html;
+  return `<div class="form-block" id="form-sec-${esc(id)}">${html}</div>`;
+}
+
+function renderForm() {
+  formMode = currentFormMode();
+  if (formMode === 'all') {
+    // 电脑端：编辑表单面板内连续显示所有模块，上下滑动一直填，不用逐个点标签
+    $('section-form').innerHTML = data.sectionOrder.map(formBlockHtml).join('');
+  } else {
+    // 手机端：标签切换单模块表单（保持原样）
+    if (isCustomId(currentSection) && !customItem(currentSection)) currentSection = 'basic';
+    $('section-form').innerHTML = formBlockHtml(currentSection);
+  }
+}
+
+/* 电脑端连续表单：滚动左栏面板定位到指定模块（避开面板内吸顶标签栏） */
+function scrollToFormBlock(id) {
+  const block = document.getElementById('form-sec-' + id);
+  const nav = $('col-nav');
+  if (!block || !nav) return;
+  const sideNav = $('section-nav-side');
+  const sideNavH = sideNav ? sideNav.offsetHeight : 0;
+  const top = block.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop - sideNavH - 10;
+  nav.scrollTo({ top, behavior: 'smooth' });
 }
 
 function fieldsHtml(fields, obj, s, i) {
@@ -607,9 +742,7 @@ function onFormInput(e) {
   if (!s || !f) return;
   const sec = data.sections[s];
   if (!sec) return;
-  if (s === 'coreSkills' && f === 'gname') { // 技能分组名
-    sec.groups[+d.g].name = t.value;
-  } else if (i !== undefined) sec.items[+i][f] = t.value;
+  if (i !== undefined) sec.items[+i][f] = t.value;
   else sec[f] = t.value;
   scheduleSave();
   renderPreview();
@@ -633,23 +766,35 @@ function renderModulePanel() {
   }).join('');
 }
 
-/* ---------- 标题主题色调色盘（简历标题配色，与网站皮肤独立） ---------- */
+/* ---------- 标题主题色调色盘（简历标题配色，与网站皮肤独立） ----------
+   同时渲染两处：中栏模块管理面板（电脑端）+ 导航「主题」弹层（手机端） */
 function renderPalette() {
-  const box = $('palette');
-  if (!box) return;
-  box.innerHTML = PALETTE.map(c =>
+  const html = PALETTE.map(c =>
     `<button class="sw ${data.themeColor === c ? 'active' : ''}" data-action="color-pick" data-id="${c}"
        style="background:${c}" title="${c}"></button>`).join('');
+  const box = $('palette');
+  if (box) box.innerHTML = html;
+  const m = $('theme-picker-swatches');
+  if (m) m.innerHTML = html;
 }
 
 /* ---------- 三栏拖拽换位（宽屏；顺序存 data.colOrder，窄屏由 CSS 强制固定顺序） ---------- */
 function applyColOrder() {
   const map = { nav: 'col-nav', manage: 'col-manage', preview: 'col-preview' };
+  if (window.innerWidth <= 1100) {
+    // 手机端：布局顺序由 CSS 强制（表单 → 模块管理），不套用桌面端拖拽顺序——
+    // 否则桌面上拖过的顺序会以 order 内联样式跟到手机端，把「清空全部内容」顶到表单上面
+    for (const elId of Object.values(map)) $(elId).style.order = '';
+    return;
+  }
   (data.colOrder || ['nav', 'manage', 'preview']).forEach((key, idx) => { $(map[key]).style.order = idx + 1; });
 }
+/* 拖拽换位：交换两个面板的顺序（旧逻辑是「插到目标前面」，拖左栏到中栏时顺序不变，等于失灵） */
 function moveColumn(from, to) {
-  const order = (data.colOrder || ['nav', 'manage', 'preview']).filter(x => x !== from);
-  order.splice(order.indexOf(to), 0, from); // 插入到目标面板的位置
+  const order = (data.colOrder || ['nav', 'manage', 'preview']).slice();
+  const i = order.indexOf(from), j = order.indexOf(to);
+  if (i < 0 || j < 0 || i === j) return;
+  [order[i], order[j]] = [order[j], order[i]]; // 交换，拖放后面板顺序真正改变
   data.colOrder = order;
   saveData(); applyColOrder();
   toast('面板布局已调整（刷新后保持）');
@@ -692,9 +837,8 @@ function sectionEmpty(id) {
     return !it || (!String(it.title).trim() && !String(it.text).trim());
   }
   const def = SECTION_DEFS[id], sec = data.sections[id];
-  if (def.type === 'coreSkills') return sec.groups.every(g => !g.name.trim() && g.tags.length === 0);
   if (def.type === 'list') return sec.items.every(it => Object.values(it).every(v => !String(v).trim()));
-  if (def.type === 'text') return !String(sec.text).trim();
+  if (def.type === 'text') return !String(sec.text).trim(); // 核心技能 / 自我评价（纯文本区块）
   return false;
 }
 
@@ -741,11 +885,7 @@ function sectionHtml(id) {
   }
   const def = SECTION_DEFS[id], sec = data.sections[id];
   let body = '';
-  if (id === 'coreSkills') {
-    // 核心技能：分组名 + 简洁标签排（无进度条）
-    body = sec.groups.filter(g => g.name.trim() || g.tags.length).map(g => `
-      <div class="rp-skill-group">${g.name.trim() ? `<span class="rp-skill-gname">${esc(g.name)}</span>` : ''}${g.tags.map(t => `<span class="rp-tag">${esc(t)}</span>`).join('')}</div>`).join('');
-  } else if (id === 'education') {
+  if (id === 'education') {
     body = filled(sec.items, ['school', 'major', 'degree', 'gpa', 'courses', 'honors', 'start', 'end']).map(it => `
       <div class="rp-item"><i class="rp-dot"></i>
         <div class="rp-item-head"><span class="rp-item-title">${esc(it.school)}</span><span class="rp-item-date">${dateRange(it)}</span></div>
@@ -767,7 +907,7 @@ function sectionHtml(id) {
         <div class="rp-item-sub">${esc(it.role)}</div>
         ${it.desc.trim() ? `<div class="rp-item-desc">${esc(it.desc)}</div>` : ''}
       </div>`).join('');
-  } else { // summary
+  } else { // summary / coreSkills（纯文本区块，pre-wrap 保留换行）
     body = `<div class="rp-item"><div class="rp-item-desc">${esc(sec.text)}</div></div>`;
   }
   return `<section class="rp-section">${secTitle(esc(def.title))}${body}</section>`;
@@ -779,6 +919,11 @@ function renderPreview() {
   p.className = `resume-preview tpl-${tid} fs-${data.fontScale} ha-${data.layout.align} ta-${data.layout.titleAlign}`;
   p.style.setProperty('--resume-theme', data.themeColor);
   p.style.setProperty('--resume-font', (FONTS[data.font] || FONTS.system).stack);
+  // 间距设置（间距弹窗调整，含默认值兜底）
+  const sp = data.spacing || SPACING_DEFAULTS;
+  p.style.setProperty('--resume-sec-gap', sp.section + 'px');
+  p.style.setProperty('--resume-page-margin', sp.margin + 'px');
+  p.style.setProperty('--resume-line-height', sp.line);
 
   // 渲染顺序完全由 sectionOrder 驱动（用户手动排序优先）
   const renderOne = id => id === 'basic' ? (secVisible('basic') ? headerHtml() : '') : sectionHtml(id);
@@ -861,12 +1006,21 @@ async function exportPNG() {
   showLoading('正在生成图片…'); // 可爱加载层
   await new Promise(r => setTimeout(r, 60));
   try {
-    const canvas = await html2canvas(p, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    // 完整长图：显式指定渲染区域为整个元素的宽高（内容多长都全部导出，不像以前只截视口内一页）。
+    // windowWidth ≥1200 让克隆文档按宽屏布局渲染，避免窄屏媒体查询影响克隆里的预览；
+    // windowHeight 覆盖「元素文档顶部 + 完整高度」，保证底部内容也进入渲染范围。
+    const docTop = p.getBoundingClientRect().top + (window.scrollY || document.documentElement.scrollTop);
+    const canvas = await html2canvas(p, {
+      scale: 2, backgroundColor: '#ffffff', useCORS: true,
+      width: p.scrollWidth, height: p.scrollHeight,
+      windowWidth: Math.max(1200, p.scrollWidth),
+      windowHeight: Math.ceil(docTop + p.scrollHeight + 100)
+    });
     const a = document.createElement('a');
     a.download = fileBase() + '.png'; // 姓名-求职意向-简历.png
     a.href = canvas.toDataURL('image/png');
     a.click();
-    toast('已导出 PNG');
+    toast('已导出 PNG（完整长图）');
   } catch (err) {
     console.error(err);
     toast('导出 PNG 失败，请重试', 'warn');
@@ -911,6 +1065,7 @@ function refreshAll() {
   if (!data.sectionOrder.includes(currentSection)) currentSection = 'basic';
   renderSkinMenus(); syncTemplateSelect(); syncFontSelect(); syncLayoutControls();
   renderSectionNav(); renderForm(); renderModulePanel(); renderPalette(); renderPreview(); applyColOrder(); renderTemplateCards();
+  renderMobilePickers(); syncStickyTop();
 }
 
 /* ---------- 导出：真正的 Word（.docx，本地 docx.js 生成，Word/WPS 可编辑） ---------- */
@@ -1002,16 +1157,7 @@ async function buildDocx() {
       continue;
     }
     const sec = data.sections[id];
-    if (id === 'summary') { push(secH('自我评价'), ...descPs(sec.text)); continue; }
-    if (id === 'coreSkills') {
-      push(secH('核心技能'));
-      for (const g of sec.groups) {
-        if (!g.name.trim() && !g.tags.length) continue;
-        push(P([T(g.name.trim() ? g.name + '：' : '', { bold: true, size: 20 }), T(g.tags.join('、'), { size: 20 })],
-          { spacing: { after: 60 } }));
-      }
-      continue;
-    }
+    if (id === 'summary' || id === 'coreSkills') { push(secH(SECTION_DEFS[id].title), ...descPs(sec.text)); continue; } // 纯文本区块
     push(secH(SECTION_DEFS[id].title));
     for (const it of sec.items) {
       if (id === 'education') {
@@ -1077,7 +1223,8 @@ async function aiPolish(ctx) {
   if (!ctx.text || !ctx.text.trim()) { toast('先写一些要点，AI 才能帮你美化', 'warn'); return; }
   pendingPolish = ctx;
   showLoading('AI 正在美化…');
-  const typeName = ctx.f === 'desc' ? '工作 / 项目描述' : (ctx.f === 'text' ? '自我评价' : '简历文本');
+  const typeName = ctx.f === 'desc' ? '工作 / 项目描述'
+    : (ctx.s === 'coreSkills' ? '核心技能' : (ctx.f === 'text' ? '自我评价' : '简历文本'));
   const content = await callKimi([
     { role: 'system', content: '你是资深中文简历顾问。把用户给的简历要点润色为专业、精炼、符合中文简历习惯的表述；用要点式短句（每句一行），突出动作与成果；不虚构事实；只输出润色后的正文，不要任何解释。' },
     { role: 'user', content: `请美化这段${typeName}：\n${ctx.text}` }
@@ -1118,7 +1265,7 @@ function serializeResume() {
       continue;
     }
     const sec = data.sections[id];
-    if (id === 'summary') { L.push(`【自我评价】\n${sec.text}`); continue; }
+    if (id === 'summary' || id === 'coreSkills') { L.push(`【${SECTION_DEFS[id].title}】\n${sec.text}`); continue; } // 纯文本区块
     const rows = sec.items.map(it => Object.values(it).filter(v => String(v).trim()).join('，'));
     L.push(`【${SECTION_DEFS[id].title}】\n` + rows.join('\n'));
   }
@@ -1280,24 +1427,49 @@ function cancelCrop() {
   crop = null;
 }
 
-/* ---------- 预览 / 导出浮层 ---------- */
+/* ---------- 预览 / 导出浮层 ----------
+   弹窗 = 上：整页效果图（wrap 精确包裹缩放后的白卡片，内容再长也在卡片内、由弹窗滚动区负责滚动）
+          下（仅手机端）：导出（展开 PNG/Word/PDF/JSON）/ AI 诊断 / 关闭预览 */
 function openExportModal() {
   const box = $('export-preview-box');
   const clone = preview().cloneNode(true);
   clone.removeAttribute('id');
   box.innerHTML = '';
   const wrap = document.createElement('div');
+  wrap.className = 'export-wrap';
   wrap.appendChild(clone);
   box.appendChild(wrap);
   $('export-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden'; // 弹窗打开时锁住背景滚动（手机全屏弹窗防滚动穿透）
   requestAnimationFrame(() => {
-    const s = Math.min(1, (box.clientWidth - 40) / 794);
+    const cs = getComputedStyle(box);
+    const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const s = Math.min(1, (box.clientWidth - pad) / 794);
     clone.style.transform = `scale(${s})`;
-    clone.style.transformOrigin = 'top center';
-    wrap.style.height = (clone.scrollHeight * s) + 'px';
+    clone.style.transformOrigin = 'top left';
+    // wrap 尺寸 = 缩放后的真实视觉尺寸：白卡片完整包住全部内容，绝不溢出到黑色背景上
+    wrap.style.width = Math.ceil(794 * s) + 'px';
+    wrap.style.height = Math.ceil(clone.scrollHeight * s) + 'px';
   });
 }
-function closeExportModal() { $('export-modal').classList.add('hidden'); }
+function closeExportModal() {
+  $('export-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+/* ---------- 间距设置弹窗（滑块实时调整 + 单项重置；值存 data.spacing、渲染时注入 CSS 变量） ---------- */
+function syncSpacingUI() {
+  for (const k of ['section', 'margin', 'line']) {
+    const el = $('spacing-' + k);
+    if (!el) continue;
+    el.value = data.spacing[k];
+    $('spacing-' + k + '-val').textContent = SPACING_FMT[k](data.spacing[k]);
+  }
+}
+function openSpacingModal() {
+  syncSpacingUI();
+  $('spacing-modal').classList.remove('hidden');
+}
 
 /* ---------- 全局事件（事件委托） ---------- */
 function bindEvents() {
@@ -1322,36 +1494,50 @@ function bindEvents() {
         const wasHidden = dd.classList.contains('hidden');
         document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
         dd.classList.toggle('hidden', !wasHidden);
+        if (wasHidden) placeDropdown(el, dd); // 浮层按按钮位置放置，展开在外面
         break;
       }
       case 'skin-pick':
         applySkin(id);
         document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
         break;
-      case 'nav-pick':
+      case 'nav-pick': {
         currentSection = id;
-        renderSectionNav(); renderForm();
+        renderSectionNav(); // 两处标签栏同步高亮
+        if (window.innerWidth > 1100) {
+          scrollToFormBlock(id); // 电脑端：连续表单已显示全部模块，滚动定位即可、不重渲
+        } else {
+          renderForm(); // 手机端：切换到对应单模块表单
+          const btn = document.querySelector(`#section-nav button[data-id="${CSS.escape(id)}"]`);
+          if (btn) btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          $('section-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         break;
-      case 'item-add': {
-        const def = SECTION_DEFS[currentSection];
+      }
+      case 'item-add': { // 按钮带 data-s（连续表单下定位所属模块，不再依赖 currentSection）
+        const sid = el.dataset.s || currentSection;
+        const def = SECTION_DEFS[sid];
         if (!def || def.type !== 'list') break;
-        data.sections[currentSection].items.push(def.newItem());
+        data.sections[sid].items.push(def.newItem());
         saveData(); renderForm(); renderModulePanel(); renderPreview();
+        if (window.innerWidth > 1100) scrollToFormBlock(sid);
         break;
       }
       case 'item-del': {
-        const def = SECTION_DEFS[currentSection];
+        const sid = el.dataset.s || currentSection;
+        const def = SECTION_DEFS[sid];
         if (!def || def.type !== 'list') break;
-        const items = data.sections[currentSection].items;
+        const items = data.sections[sid].items;
         items.splice(+i, 1);
         if (!items.length) items.push(def.newItem());
         saveData(); renderForm(); renderModulePanel(); renderPreview();
         break;
       }
       case 'item-up': case 'item-down': {
-        const def = SECTION_DEFS[currentSection];
+        const sid = el.dataset.s || currentSection;
+        const def = SECTION_DEFS[sid];
         if (!def || def.type !== 'list') break;
-        const items = data.sections[currentSection].items;
+        const items = data.sections[sid].items;
         const j = +i + (act === 'item-up' ? -1 : 1);
         if (j < 0 || j >= items.length) break;
         [items[+i], items[j]] = [items[j], items[+i]];
@@ -1380,7 +1566,14 @@ function bindEvents() {
         data.sectionOrder.push(vid);
         currentSection = vid;
         saveData(); renderSectionNav(); renderForm(); renderModulePanel(); renderPreview();
-        toast('已添加自定义模块，请在左侧填写标题和内容');
+        toast('已添加自定义模块，请填写标题和内容');
+        if (window.innerWidth > 1100) {
+          scrollToFormBlock(vid); // 电脑端：滚动到新模块的表单块
+        } else { // 手机端：标签栏滚到末尾的新标签 + 页面滚回表单区
+          const btn = document.querySelector(`#section-nav button[data-id="${CSS.escape(vid)}"]`);
+          if (btn) btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          $('section-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         break;
       }
       case 'custom-del': { // 永久删除自定义模块
@@ -1391,26 +1584,25 @@ function bindEvents() {
         toast('自定义模块已删除');
         break;
       }
-      case 'cskill-group-add': // 核心技能：添加分组
-        data.sections.coreSkills.groups.push(SECTION_DEFS.coreSkills.newGroup());
-        saveData(); renderForm(); renderModulePanel(); renderPreview();
-        break;
-      case 'cskill-group-del': { // 删除分组（至少保留一个）
-        const groups = data.sections.coreSkills.groups;
-        if (groups.length <= 1) break;
-        groups.splice(+el.dataset.g, 1);
-        saveData(); renderForm(); renderModulePanel(); renderPreview();
-        break;
-      }
-      case 'tag-del': // 删除技能关键词
-        data.sections.coreSkills.groups[+el.dataset.g].tags.splice(+el.dataset.t, 1);
-        saveData(); renderForm(); renderPreview();
-        break;
       case 'color-pick': // 标题主题色
         data.themeColor = id;
         saveData(); renderPalette(); renderPreview();
         toast('标题主题色已更新');
         break;
+      /* ---- 间距设置弹窗 ---- */
+      case 'spacing-open': openSpacingModal(); break;
+      case 'spacing-close': $('spacing-modal').classList.add('hidden'); break;
+      case 'spacing-reset': { // 单项重置回默认值
+        const k = el.dataset.k;
+        if (!(k in SPACING_DEFAULTS)) break;
+        data.spacing[k] = SPACING_DEFAULTS[k];
+        saveData(); syncSpacingUI(); renderPreview();
+        toast('已重置为默认间距');
+        break;
+      }
+      /* ---- 撤销 / 重做 ---- */
+      case 'undo': undo(); break;
+      case 'redo': redo(); break;
       case 'avatar-upload': $('avatar-file').click(); break;
       case 'crop-ok': confirmCrop(); break;
       case 'crop-cancel': cancelCrop(); break;
@@ -1435,14 +1627,47 @@ function bindEvents() {
         break;
       case 'open-export':  openExportModal(); break;
       case 'close-export': closeExportModal(); break;
-      case 'modal-backdrop': if (e.target.classList.contains('modal')) e.target.classList.add('hidden'); break;
-      case 'export-menu': { // 导出合并菜单（预览/PDF/PNG/Word/JSON）
+      case 'modal-backdrop':
+        if (e.target.classList.contains('modal')) {
+          e.target.classList.add('hidden');
+          if (e.target.id === 'export-modal') document.body.style.overflow = ''; // 恢复背景滚动
+        }
+        break;
+      case 'export-menu': { // 导出合并菜单（头部导航 + 预览弹窗底部共用）
         const dd = el.parentElement.querySelector('.dropdown');
         const wasHidden = dd.classList.contains('hidden');
         document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
         dd.classList.toggle('hidden', !wasHidden);
+        if (wasHidden) placeDropdown(el, dd); // 浮层按按钮位置放置，展开在外面
         break;
       }
+      /* ---- 导航：模板 / 字体 / 主题 / 标题对齐 按钮弹层 ---- */
+      case 'picker-menu': {
+        const dd = el.parentElement.querySelector('.dropdown');
+        const wasHidden = dd.classList.contains('hidden');
+        document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
+        dd.classList.toggle('hidden', !wasHidden);
+        if (wasHidden) placeDropdown(el, dd); // 浮层按按钮位置放置，展开在导航栏外面
+        break;
+      }
+      case 'pick-template': // 手机端选模板（switchTemplate 内含保存 + 按钮文字同步）
+        switchTemplate(id, false);
+        renderMobilePickers();
+        document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
+        break;
+      case 'pick-font': // 手机端选字体
+        if (!FONTS[id]) break;
+        data.font = id;
+        saveData(); syncFontSelect(); renderMobilePickers(); renderPreview();
+        document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
+        toast(`简历字体已切换：${FONTS[id].name}`);
+        break;
+      case 'pick-align': // 手机端选标题对齐
+        data.layout.titleAlign = id;
+        saveData(); syncLayoutControls(); renderMobilePickers(); renderPreview();
+        document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
+        toast('标题对齐已更新');
+        break;
       case 'json-backup': { // 面板里的「备份 / 恢复」→ 展开头部导出菜单的备份项
         document.querySelectorAll('.dropdown').forEach(d2 => d2.classList.add('hidden'));
         const dd = document.querySelector('.export-switcher .dropdown');
@@ -1506,52 +1731,35 @@ function bindEvents() {
         currentReport.issues.splice(+i, 1);
         renderAiReportBody();
         break;
-      case 'toggle-preview': {
-        document.body.classList.toggle('show-preview');
-        const shown = document.body.classList.contains('show-preview');
-        el.textContent = shown ? '关闭预览' : '预览';
-        if (shown) fitPreview();
+      case 'toggle-preview': // 手机端「预览」FAB → 预览弹窗（上效果图、下导出/AI 诊断/关闭按钮）
+        openExportModal();
         break;
-      }
     }
   });
 
   // 表单输入（input 覆盖文本框；change 覆盖下拉框）
   $('section-form').addEventListener('input', onFormInput);
   $('section-form').addEventListener('change', onFormInput);
-  // 技能标签：回车添加关键词
-  $('section-form').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.target.classList.contains('tag-input')) {
-      e.preventDefault();
-      const v = e.target.value.trim();
-      if (!v) return;
-      data.sections.coreSkills.groups[+e.target.dataset.g].tags.push(v);
-      saveData(); renderForm(); renderModulePanel(); renderPreview();
-    }
-  });
 
-  // 「对齐/显示」下拉（页头对齐 / 标题对齐 / 联系方式标签），立即生效并存草稿
+  // 「对齐/显示」下拉（页头对齐 / 标题对齐 / 显示方式），立即生效并存草稿
   document.addEventListener('change', e => {
     const t = e.target;
     if (t.matches && t.matches('select[data-layout]')) {
       data.layout[t.dataset.layout] = t.value;
       saveData(); renderPreview();
-      const names = { align: '页头对齐', titleAlign: '标题对齐', contactMode: '联系方式显示' };
+      const names = { align: '页头对齐', titleAlign: '标题对齐', contactMode: '显示方式' };
       toast(`${names[t.dataset.layout] || '设置'}已更新`);
     }
   });
 
-  // 模板 / 字体下拉
-  $('template-select').addEventListener('change', e => {
-    data.templateId = e.target.value;
-    saveData(); renderPreview(); renderTemplateCards();
-    toast(`已切换到「${TEMPLATES[e.target.value].name}」模板，已填内容全部保留`);
-  });
-  $('font-select').addEventListener('change', e => {
-    data.font = e.target.value;
-    saveData(); renderPreview();
-    toast(`简历字体已切换：${FONTS[e.target.value].name}`);
-  });
+  // 间距设置弹窗：三个滑块实时生效
+  for (const k of ['section', 'margin', 'line']) {
+    $('spacing-' + k).addEventListener('input', e => {
+      data.spacing[k] = k === 'line' ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
+      $('spacing-' + k + '-val').textContent = SPACING_FMT[k](data.spacing[k]);
+      scheduleSave(); renderPreview();
+    });
+  }
 
   // 导入 JSON / 上传头像 文件框
   $('import-file').addEventListener('change', e => {
@@ -1563,7 +1771,11 @@ function bindEvents() {
     e.target.value = '';
   });
 
-  window.addEventListener('resize', () => { fitPreview(); fitMinis(); });
+  window.addEventListener('resize', () => {
+    fitPreview(); fitMinis(); syncStickyTop();
+    if (currentFormMode() !== formMode) renderForm(); // 跨越 1100px 断点：切换 连续表单 / 单模块表单
+    applyColOrder(); // 手机端清除内联 order（CSS 强制顺序），电脑端应用拖拽顺序
+  });
   window.addEventListener('beforeprint', enterPrintMode);
   window.addEventListener('afterprint', exitPrintMode);
   bindColDnD(); // 三栏拖拽换位
@@ -1573,6 +1785,7 @@ function bindEvents() {
 /* ---------- 启动（带兜底：任何一步异常都不至于让整页交互瘫痪） ---------- */
 function init() {
   if (!SKINS[data.skin] || !data.unlockedSkins.includes(data.skin)) data.skin = 'default';
+  lastSaved = JSON.stringify(data); // 撤销栈基准：加载完成时的状态（此前的状态不可撤销）
   applySkin(data.skin, { silent: true });
   renderSkinMenus();
   syncTemplateSelect();
@@ -1582,6 +1795,7 @@ function init() {
   renderPalette();
   applyColOrder();
   bindEvents();
+  updateUndoButtons();
   showView('home');
   if (!localStorage.getItem(GUIDE_KEY)) $('guide-banner').classList.remove('hidden');
   if (hadDraft) $('save-status').textContent = '草稿已恢复';
